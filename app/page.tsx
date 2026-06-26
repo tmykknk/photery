@@ -52,7 +52,7 @@ function deriveCategory(name: string): string {
   const normalized = prefix?.trim();
 
   if (!normalized || normalized.length < 3 || normalized === name) {
-    return "Gallery";
+    return "Date:";
   }
 
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);

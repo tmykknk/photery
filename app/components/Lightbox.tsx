@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion, type PanInfo } from "framer-motion";
 import Image from "next/image";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import type { GalleryImage } from "./gallery-types";
 
@@ -89,6 +89,16 @@ export default function Lightbox({
   onPrevious,
   onNext,
 }: LightboxProps) {
+  const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const animationFrame = window.requestAnimationFrame(() => {
+      setPortalRoot(document.body);
+    });
+
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, []);
+
   useEffect(() => {
     if (!image) {
       return;
@@ -133,7 +143,7 @@ export default function Lightbox({
     }
   };
 
-  if (typeof document === "undefined") {
+  if (!portalRoot) {
     return null;
   }
 
@@ -229,6 +239,6 @@ export default function Lightbox({
         </motion.div>
       ) : null}
     </AnimatePresence>,
-    document.body,
+    portalRoot,
   );
 }

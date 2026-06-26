@@ -11,5 +11,6 @@ export function getImageDateLabel(capturedAt: string | null): string {
   return new Intl.DateTimeFormat("en", {
     month: "short",
     year: "numeric",
+    timeZone: "Asia/Tokyo",
   }).format(date);
 }
