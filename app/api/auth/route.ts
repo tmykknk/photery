@@ -1,4 +1,8 @@
-import { createSiteAuthToken, siteAuthCookieName } from "@/app/lib/auth-token";
+import {
+  constantTimeEqual,
+  createSiteAuthToken,
+  siteAuthCookieName,
+} from "@/app/lib/auth-token";
 import { NextResponse } from "next/server";
 
 interface AuthRequestBody {
@@ -43,7 +47,11 @@ export async function POST(request: Request) {
     const password = await getPasswordFromRequest(request);
     const correctPassword = process.env.VIEW_PASSWORD;
 
-    if (!password || !correctPassword || password !== correctPassword) {
+    if (
+      !password ||
+      !correctPassword ||
+      !constantTimeEqual(password, correctPassword)
+    ) {
       return redirectAfterPost("/login?error=1");
     }
 

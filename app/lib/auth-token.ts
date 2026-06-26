@@ -8,7 +8,7 @@ function toHex(buffer: ArrayBuffer): string {
     .join("");
 }
 
-function constantTimeEqual(left: string, right: string): boolean {
+export function constantTimeEqual(left: string, right: string): boolean {
   const maxLength = Math.max(left.length, right.length);
   let difference = left.length ^ right.length;
 
