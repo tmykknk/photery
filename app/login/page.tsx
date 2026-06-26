@@ -1,4 +1,7 @@
-import PasswordInput from "./PasswordInput";
+import { isValidSiteAuthToken, siteAuthCookieName } from "@/app/lib/auth-token";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import LoginForm from "./LoginForm";
 
 interface LoginPageProps {
   searchParams: Promise<{
@@ -8,6 +11,16 @@ interface LoginPageProps {
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const { error } = await searchParams;
+  const cookieStore = await cookies();
+  const authToken = cookieStore.get(siteAuthCookieName)?.value;
+  const isAuthenticated = await isValidSiteAuthToken(
+    authToken,
+    process.env.VIEW_PASSWORD,
+  );
+
+  if (isAuthenticated) {
+    redirect("/");
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
@@ -15,18 +28,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         <h1 className="text-xl font-bold text-gray-900 text-center mb-4">
           パスワードを入力
         </h1>
-        <form action="/api/auth" method="post" className="space-y-4">
-          <PasswordInput />
-          {error ? (
-            <p className="text-xs text-red-500">パスワードが違います</p>
-          ) : null}
-          <button
-            type="submit"
-            className="cursor-pointer w-full rounded-md bg-blue-600 p-2 text-sm font-medium text-white hover:bg-blue-700"
-          >
-            閲覧する
-          </button>
-        </form>
+        <LoginForm hasError={Boolean(error)} />
       </div>
     </div>
   );

@@ -14,8 +14,11 @@ function isAuthRequestBody(value: unknown): value is AuthRequestBody {
   );
 }
 
-function getRequestOrigin(request: Request): string {
-  return new URL(request.url).origin;
+function redirectAfterPost(path: string): NextResponse {
+  return new NextResponse(null, {
+    status: 303,
+    headers: { Location: path },
+  });
 }
 
 async function getPasswordFromRequest(request: Request): Promise<string | null> {
@@ -41,10 +44,10 @@ export async function POST(request: Request) {
     const correctPassword = process.env.VIEW_PASSWORD;
 
     if (!password || !correctPassword || password !== correctPassword) {
-      return NextResponse.redirect(new URL("/login?error=1", getRequestOrigin(request)));
+      return redirectAfterPost("/login?error=1");
     }
 
-    const response = NextResponse.redirect(new URL("/", getRequestOrigin(request)));
+    const response = redirectAfterPost("/");
     const authToken = await createSiteAuthToken(correctPassword);
 
     // Store a derived token, never the raw viewing password.
@@ -60,6 +63,6 @@ export async function POST(request: Request) {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error("Auth error:", message);
-    return NextResponse.redirect(new URL("/login?error=1", getRequestOrigin(request)));
+    return redirectAfterPost("/login?error=1");
   }
 }
