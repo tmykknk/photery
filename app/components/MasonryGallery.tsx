@@ -147,7 +147,7 @@ function GalleryCard({
             src={image.imageUrl}
             alt={image.name}
             fill
-            sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
+            sizes="(max-width: 767px) 50vw, (max-width: 1024px) 33vw, 25vw"
             className="object-cover grayscale-0 transition duration-200 ease-out md:grayscale md:group-hover:scale-[1.025] md:group-hover:grayscale-0"
             loading="eager"
             fetchPriority={index < 8 ? "high" : "auto"}
@@ -259,7 +259,7 @@ export default function MasonryGallery({ images }: MasonryGalleryProps) {
       {images.length > 0 ? (
         <motion.section
           layout
-          className="columns-1 gap-4 sm:columns-2 md:columns-3 lg:columns-4"
+          className="columns-2 gap-3 sm:gap-4 md:columns-3 lg:columns-4"
         >
           <AnimatePresence mode="popLayout">
             {images.map((image, index) => (
