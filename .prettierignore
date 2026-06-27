@@ -1,0 +1,8 @@
+.next
+.vercel
+node_modules
+coverage
+*.tsbuildinfo
+pnpm-lock.yaml
+
+.agents
