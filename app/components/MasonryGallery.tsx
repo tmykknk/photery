@@ -125,10 +125,9 @@ function GalleryCard({ image, index, onOpen }: GalleryCardProps) {
       onClick={onOpen}
       className="group mb-4 block w-full cursor-pointer break-inside-avoid
         overflow-hidden rounded-none border border-[#d7dedb] bg-white text-left
-        shadow-[0_12px_34px_rgba(17,24,22,0.055)] transition duration-150
-        outline-none hover:-translate-y-0.5
-        hover:shadow-[0_18px_44px_rgba(17,24,22,0.105)] focus-visible:ring-2
-        focus-visible:ring-[#2f5d7c]/25"
+        shadow-[0_12px_34px_rgba(17,24,22,0.055)] transition-shadow duration-150
+        outline-none hover:shadow-[0_18px_44px_rgba(17,24,22,0.105)]
+        focus-visible:ring-2 focus-visible:ring-[#2f5d7c]/25"
     >
       <div
         className="relative w-full overflow-hidden bg-[#e9efec]"
