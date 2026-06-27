@@ -6,6 +6,20 @@ import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
+interface DriveImageFile {
+  id: string;
+  name: string | null;
+  thumbnailLink: string | null;
+}
+
+function isDriveImageFile(file: {
+  id?: string | null;
+  name?: string | null;
+  thumbnailLink?: string | null;
+}): file is DriveImageFile {
+  return typeof file.id === "string" && file.id.length > 0;
+}
+
 export async function GET() {
   const cookieStore = await cookies();
   const authToken = cookieStore.get(siteAuthCookieName)?.value;
@@ -34,23 +48,28 @@ export async function GET() {
     });
 
     const drive = google.drive({ version: "v3", auth });
+    const files: DriveImageFile[] = [];
+    let pageToken: string | undefined;
 
-    const res = await drive.files.list({
-      q: `'${process.env.GOOGLE_DRIVE_FOLDER_ID}' in parents and mimeType contains 'image/' and trashed = false`,
-      fields: "files(id, name, thumbnailLink)",
-    });
+    do {
+      const res = await drive.files.list({
+        q: `'${process.env.GOOGLE_DRIVE_FOLDER_ID}' in parents and mimeType contains 'image/' and trashed = false`,
+        fields: "nextPageToken, files(id, name, thumbnailLink)",
+        pageSize: 1000,
+        pageToken,
+      });
 
-    const files = res.data.files || [];
+      files.push(...(res.data.files ?? []).filter(isDriveImageFile));
+      pageToken = res.data.nextPageToken ?? undefined;
+    } while (pageToken);
 
-    for (const file of files) {
-      const thumbnailUrl = file.thumbnailLink ?? null;
-
+    if (files.length > 0) {
       const { error } = await supabase.from("drive_images").upsert(
-        {
+        files.map((file) => ({
           drive_file_id: file.id,
           name: file.name,
-          thumbnail_url: thumbnailUrl,
-        },
+          thumbnail_url: file.thumbnailLink,
+        })),
         { onConflict: "drive_file_id" },
       );
 

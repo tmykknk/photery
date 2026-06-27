@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import MasonryGallery from "./components/MasonryGallery";
 import type { GalleryImage } from "./components/gallery-types";
 
@@ -57,6 +57,36 @@ function deriveCategory(name: string): string {
 
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }
+const galleryPageSize = 1000;
+
+async function fetchAllDriveImageRows(
+  supabase: SupabaseClient<Database>,
+): Promise<DriveImageRow[]> {
+  const rows: DriveImageRow[] = [];
+  let from = 0;
+
+  while (true) {
+    const to = from + galleryPageSize - 1;
+    const { data, error } = await supabase
+      .from("drive_images")
+      .select("*")
+      .order("created_at", { ascending: true })
+      .range(from, to);
+
+    if (error) {
+      throw error;
+    }
+
+    rows.push(...(data ?? []));
+
+    if (!data || data.length < galleryPageSize) {
+      return rows;
+    }
+
+    from += galleryPageSize;
+  }
+}
+
 function normalizeImage(row: DriveImageRow): GalleryImage {
   const originalName = row.name?.trim() || "Untitled image";
   const name = stripFileExtension(originalName) || "Untitled image";
@@ -76,24 +106,22 @@ export default async function Home() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
 
-  const { data: images, error } = await supabase
-    .from("drive_images")
-    .select("*");
+  let images: DriveImageRow[];
 
-  if (error) {
+  try {
+    images = await fetchAllDriveImageRows(supabase);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
     return (
       <main className="min-h-screen bg-[#f7f8f4] p-6 text-[#161a18] md:p-10">
-        <div
-          className="rounded-md border border-red-200 bg-red-50 p-6
-            text-red-700"
-        >
-          データの取得に失敗しました: {error.message}
+        <div className="rounded-md border border-red-200 bg-red-50 p-6 text-red-700">
+          データの取得に失敗しました: {message}
         </div>
       </main>
     );
   }
 
-  const galleryImages = (images ?? []).map(normalizeImage);
+  const galleryImages = images.map(normalizeImage);
 
   return (
     <main
