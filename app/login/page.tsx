@@ -23,9 +23,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
+    <div
+      className="flex min-h-screen items-center justify-center bg-gray-50 p-4"
+    >
       <div className="w-full max-w-sm rounded-lg border bg-white p-6 shadow-sm">
-        <h1 className="text-xl font-bold text-gray-900 text-center mb-4">
+        <h1 className="mb-4 text-center text-xl font-bold text-gray-900">
           パスワードを入力
         </h1>
         <LoginForm hasError={Boolean(error)} />

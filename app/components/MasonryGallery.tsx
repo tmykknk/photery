@@ -123,7 +123,12 @@ function GalleryCard({ image, index, onOpen }: GalleryCardProps) {
       viewport={{ once: true, margin: "0px 0px -8% 0px", amount: 0.12 }}
       whileHover={{ y: -2, transition: { duration: 0.12 } }}
       onClick={onOpen}
-      className="cursor-pointer group mb-4 block w-full break-inside-avoid overflow-hidden rounded-none border border-[#d7dedb] bg-white text-left shadow-[0_12px_34px_rgba(17,24,22,0.055)] outline-none transition duration-150 hover:-translate-y-0.5 hover:shadow-[0_18px_44px_rgba(17,24,22,0.105)] focus-visible:ring-2 focus-visible:ring-[#2f5d7c]/25"
+      className="group mb-4 block w-full cursor-pointer break-inside-avoid
+        overflow-hidden rounded-none border border-[#d7dedb] bg-white text-left
+        shadow-[0_12px_34px_rgba(17,24,22,0.055)] transition duration-150
+        outline-none hover:-translate-y-0.5
+        hover:shadow-[0_18px_44px_rgba(17,24,22,0.105)] focus-visible:ring-2
+        focus-visible:ring-[#2f5d7c]/25"
     >
       <div
         className="relative w-full overflow-hidden bg-[#e9efec]"
@@ -135,13 +140,18 @@ function GalleryCard({ image, index, onOpen }: GalleryCardProps) {
             alt={image.name}
             fill
             sizes="(max-width: 767px) 50vw, (max-width: 1024px) 33vw, 25vw"
-            className="object-cover grayscale-0 transition duration-200 ease-out md:grayscale md:group-hover:scale-[1.025] md:group-hover:grayscale-0"
+            className="object-cover grayscale-0 transition duration-200 ease-out
+              md:grayscale md:group-hover:scale-[1.025]
+              md:group-hover:grayscale-0"
             loading="eager"
             fetchPriority={index < 8 ? "high" : "auto"}
             unoptimized
           />
         ) : (
-          <div className="flex h-full items-center justify-center text-sm font-medium text-zinc-400">
+          <div
+            className="flex h-full items-center justify-center text-sm
+              font-medium text-zinc-400"
+          >
             No Image
           </div>
         )}
@@ -153,7 +163,10 @@ function GalleryCard({ image, index, onOpen }: GalleryCardProps) {
         >
           {image.name}
         </p>
-        <div className="flex flex-wrap gap-2 font-sans text-xs font-semibold text-[#68736f]">
+        <div
+          className="flex flex-wrap gap-2 font-sans text-xs font-semibold
+            text-[#68736f]"
+        >
           <span>{image.category}</span>
           <span>{getImageDateLabel(image.capturedAt)}</span>
         </div>
@@ -194,7 +207,8 @@ export default function MasonryGallery({ images }: MasonryGalleryProps) {
       <AnimatePresence>
         {showIntro ? (
           <motion.div
-            className="fixed inset-0 z-60 grid place-items-center bg-[#111816] text-[#f7f8f4]"
+            className="fixed inset-0 z-60 grid place-items-center bg-[#111816]
+              text-[#f7f8f4]"
             initial={{ opacity: 1 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0, transition: { duration: 0.55 } }}
@@ -212,7 +226,8 @@ export default function MasonryGallery({ images }: MasonryGalleryProps) {
             >
               <IntroMark />
               <motion.p
-                className="text-sm font-bold uppercase tracking-[0.36em] text-[#dbe5e1]"
+                className="text-sm font-bold tracking-[0.36em] text-[#dbe5e1]
+                  uppercase"
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.28, duration: 0.5, ease: smoothEase }}
@@ -236,7 +251,10 @@ export default function MasonryGallery({ images }: MasonryGalleryProps) {
           ))}
         </section>
       ) : (
-        <div className="rounded-none border border-dashed border-[#cbd5d1] bg-white px-6 py-12 text-center text-[#68736f]">
+        <div
+          className="rounded-none border border-dashed border-[#cbd5d1] bg-white
+            px-6 py-12 text-center text-[#68736f]"
+        >
           No images to display.
         </div>
       )}

@@ -32,7 +32,10 @@ function IconButton({ label, className, onClick, children }: IconButtonProps) {
       type="button"
       aria-label={label}
       onClick={onClick}
-      className={`grid h-11 w-11 place-items-center rounded-full border border-white/20 bg-white/10 text-white shadow-lg backdrop-blur-md transition hover:bg-white/20 focus-visible:outline-2 focus-visible:outline-white/70 ${className}`}
+      className={`grid h-11 w-11 place-items-center rounded-full border
+        border-white/20 bg-white/10 text-white shadow-lg backdrop-blur-md
+        transition hover:bg-white/20 focus-visible:outline-2
+        focus-visible:outline-white/70 ${className}`}
     >
       {children}
     </button>
@@ -154,7 +157,8 @@ export default function Lightbox({
           role="dialog"
           aria-modal="true"
           aria-label={image.name}
-          className="fixed inset-0 z-70 bg-zinc-950/85 text-white backdrop-blur-md"
+          className="fixed inset-0 z-70 bg-zinc-950/85 text-white
+            backdrop-blur-md"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -163,7 +167,7 @@ export default function Lightbox({
         >
           <IconButton
             label="Close lightbox"
-            className="absolute right-4 top-4 z-20"
+            className="absolute top-4 right-4 z-20"
             onClick={(event) => {
               event.stopPropagation();
               onClose();
@@ -176,7 +180,8 @@ export default function Lightbox({
             <>
               <IconButton
                 label="Previous image"
-                className="absolute left-4 top-1/2 z-20 hidden -translate-y-1/2 md:grid"
+                className="absolute top-1/2 left-4 z-20 hidden -translate-y-1/2
+                  md:grid"
                 onClick={(event) => {
                   event.stopPropagation();
                   onPrevious();
@@ -186,7 +191,8 @@ export default function Lightbox({
               </IconButton>
               <IconButton
                 label="Next image"
-                className="absolute right-4 top-1/2 z-20 hidden -translate-y-1/2 md:grid"
+                className="absolute top-1/2 right-4 z-20 hidden -translate-y-1/2
+                  md:grid"
                 onClick={(event) => {
                   event.stopPropagation();
                   onNext();
@@ -197,10 +203,14 @@ export default function Lightbox({
             </>
           ) : null}
 
-          <div className="grid h-full grid-rows-[1fr_auto] gap-4 px-4 py-16 md:px-20">
+          <div
+            className="grid h-full grid-rows-[1fr_auto] gap-4 px-4 py-16
+              md:px-20"
+          >
             <motion.div
               key={image.driveFileId}
-              className="relative min-h-0 cursor-grab overflow-hidden rounded-md bg-black/25 active:cursor-grabbing"
+              className="relative min-h-0 cursor-grab overflow-hidden rounded-md
+                bg-black/25 active:cursor-grabbing"
               drag="x"
               dragConstraints={{ left: 0, right: 0 }}
               dragElastic={0.16}
@@ -222,7 +232,10 @@ export default function Lightbox({
                   unoptimized
                 />
               ) : (
-                <div className="flex h-full items-center justify-center text-zinc-300">
+                <div
+                  className="flex h-full items-center justify-center
+                    text-zinc-300"
+                >
                   No Image
                 </div>
               )}

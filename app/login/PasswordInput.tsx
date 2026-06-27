@@ -68,14 +68,17 @@ export default function PasswordInput() {
         name="password"
         autoComplete="current-password"
         placeholder="Password"
-        className="w-full rounded-md border p-2 pr-12 text-center text-sm text-black focus:outline-blue-500"
+        className="w-full rounded-md border p-2 pr-12 text-center text-sm
+          text-black focus:outline-blue-500"
         required
       />
       <button
         type="button"
         aria-label={isVisible ? "Hide password" : "Show password"}
         onClick={() => setIsVisible((current) => !current)}
-        className="absolute inset-y-0 right-2 my-auto grid h-8 w-8 cursor-pointer place-items-center rounded text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+        className="absolute inset-y-0 right-2 my-auto grid h-8 w-8
+          cursor-pointer place-items-center rounded text-gray-500
+          hover:bg-gray-100 hover:text-gray-900"
       >
         {isVisible ? <EyeOffIcon /> : <EyeIcon />}
       </button>

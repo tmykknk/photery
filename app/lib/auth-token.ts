@@ -20,7 +20,10 @@ export function constantTimeEqual(left: string, right: string): boolean {
   return difference === 0;
 }
 
-async function createHmacSha256(message: string, secret: string): Promise<string> {
+async function createHmacSha256(
+  message: string,
+  secret: string,
+): Promise<string> {
   const key = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(secret),

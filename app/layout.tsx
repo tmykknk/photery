@@ -11,6 +11,7 @@ const googleSansFlex = Google_Sans_Flex({
   variable: "--font-google-sans-flex",
   display: "swap",
   weight: "variable",
+  adjustFontFallback: false,
 });
 
 const courierPrime = Courier_Prime({
@@ -41,9 +42,10 @@ export default function RootLayout({
   return (
     <html
       lang="ja"
-      className={`${googleSansFlex.variable} ${courierPrime.variable} ${cormorant.variable} h-full antialiased`}
+      className={`${googleSansFlex.variable} ${courierPrime.variable}
+        ${cormorant.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col" suppressHydrationWarning>
+      <body className="flex min-h-full flex-col" suppressHydrationWarning>
         {children}
       </body>
     </html>

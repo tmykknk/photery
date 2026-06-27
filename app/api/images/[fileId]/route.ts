@@ -122,7 +122,9 @@ export async function GET(_request: Request, { params }: RouteContext) {
     );
 
     if (!(response.data instanceof Readable)) {
-      return new Response("Drive image stream was unavailable", { status: 502 });
+      return new Response("Drive image stream was unavailable", {
+        status: 502,
+      });
     }
 
     const contentType =

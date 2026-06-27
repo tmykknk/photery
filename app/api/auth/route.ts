@@ -25,7 +25,9 @@ function redirectAfterPost(path: string): NextResponse {
   });
 }
 
-async function getPasswordFromRequest(request: Request): Promise<string | null> {
+async function getPasswordFromRequest(
+  request: Request,
+): Promise<string | null> {
   const contentType = request.headers.get("content-type") ?? "";
 
   if (contentType.includes("application/json")) {

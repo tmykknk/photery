@@ -57,7 +57,9 @@ export default function LoginForm({ hasError }: LoginFormProps) {
         <button
           type="submit"
           disabled={isSubmitting}
-          className="w-full cursor-pointer rounded-md bg-blue-600 p-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-wait disabled:bg-blue-400"
+          className="w-full cursor-pointer rounded-md bg-blue-600 p-2 text-sm
+            font-medium text-white transition hover:bg-blue-700
+            disabled:cursor-wait disabled:bg-blue-400"
         >
           Open Sesame!
         </button>
@@ -67,9 +69,13 @@ export default function LoginForm({ hasError }: LoginFormProps) {
         <div
           role="status"
           aria-live="polite"
-          className="fixed inset-0 z-50 grid place-items-center bg-slate-950/25 p-4 backdrop-blur-md"
+          className="fixed inset-0 z-50 grid place-items-center bg-slate-950/25
+            p-4 backdrop-blur-md"
         >
-          <div className="grid w-full max-w-xs place-items-center gap-3 rounded-lg border border-gray-200 bg-white p-6 text-center shadow-2xl">
+          <div
+            className="grid w-full max-w-xs place-items-center gap-3 rounded-lg
+              border border-gray-200 bg-white p-6 text-center shadow-2xl"
+          >
             <LoadingMark />
             <p className="text-sm font-medium text-gray-900">Upside Down...</p>
           </div>

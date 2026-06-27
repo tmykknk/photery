@@ -83,7 +83,10 @@ export default async function Home() {
   if (error) {
     return (
       <main className="min-h-screen bg-[#f7f8f4] p-6 text-[#161a18] md:p-10">
-        <div className="rounded-md border border-red-200 bg-red-50 p-6 text-red-700">
+        <div
+          className="rounded-md border border-red-200 bg-red-50 p-6
+            text-red-700"
+        >
           データの取得に失敗しました: {error.message}
         </div>
       </main>
@@ -93,13 +96,22 @@ export default async function Home() {
   const galleryImages = (images ?? []).map(normalizeImage);
 
   return (
-    <main className="min-h-screen bg-[#f7f8f4] px-4 py-8 text-[#161a18] sm:px-6 md:px-10">
+    <main
+      className="min-h-screen bg-[#f7f8f4] px-4 py-8 text-[#161a18] sm:px-6
+        md:px-10"
+    >
       <div className="mx-auto grid max-w-7xl gap-10">
-        <header className="flex flex-col items-start gap-3 border-b border-[#d7dedb] pb-8 text-left">
+        <header
+          className="flex flex-col items-start gap-3 border-b border-[#d7dedb]
+            pb-8 text-left"
+        >
           <p className="font-mono text-xs tracking-widest text-[#56707c]">
             Share you my memories.
           </p>
-          <h1 className="font-display text-5xl font-semibold tracking-normal text-[#111816] sm:text-7xl">
+          <h1
+            className="font-display text-5xl font-semibold tracking-normal
+              text-[#111816] sm:text-7xl"
+          >
             Photery
           </h1>
         </header>
@@ -107,7 +119,10 @@ export default async function Home() {
         {galleryImages.length > 0 ? (
           <MasonryGallery images={galleryImages} />
         ) : (
-          <div className="rounded-none border border-dashed border-[#cbd5d1] bg-white px-6 py-12 text-center text-[#68736f]">
+          <div
+            className="rounded-none border border-dashed border-[#cbd5d1]
+              bg-white px-6 py-12 text-center text-[#68736f]"
+          >
             表示できる画像がありません。先に /api/sync を実行してください。
           </div>
         )}
