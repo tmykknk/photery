@@ -79,6 +79,7 @@ with check (true);
 2. Vercelでのプロジェクト作成
 3. 対象のGitHubリポジトリをImport
 4. 環境変数の設定値を入力（本番環境では `SITE_AUTH_SECRET` を必ず設定）
+5. HEIC変換で使う `sharp` のLinux x64/libvips optional dependencyが必要なため、`pnpm-workspace.yaml` の `supportedArchitectures` と `allowBuilds`、および `package.json` の `@img/sharp-*` optionalDependencies を維持する
 
 ## 6. コード整形と検証
 
@@ -189,9 +190,9 @@ photery/
 
 ### Package / Workspace
 
-- `package.json`: 依存関係と `pnpm dev` / `pnpm build` / `pnpm lint` / `pnpm format` / `pnpm format:check` などのスクリプトを管理します。画像変換には `sharp` を使います。
+- `package.json`: 依存関係と `pnpm dev` / `pnpm build` / `pnpm lint` / `pnpm format` / `pnpm format:check` などのスクリプトを管理します。画像変換には `sharp` を使い、`packageManager` でpnpmバージョンを固定しています。Vercelでlibvipsが欠落しないよう、`sharp` とLinux x64向け `@img/sharp-*` のバージョンを揃えて固定しています。
 - `pnpm-lock.yaml`: pnpmの依存バージョン固定ファイルです。
-- `pnpm-workspace.yaml`: pnpm workspace設定です。
+- `pnpm-workspace.yaml`: pnpm workspace設定です。VercelのLinux x64環境で `sharp` とlibvipsのoptional dependencyを確実に入れるため、`supportedArchitectures` と `allowBuilds` を設定しています。
 - `next-env.d.ts`: Next.jsが生成・参照する型定義ファイルです。通常は手動編集しません。
 
 ### Environment / Git
