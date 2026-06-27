@@ -109,6 +109,11 @@ photery/
 │   │   ├── gallery-types.ts
 │   │   └── gallery-utils.ts
 │   ├── lib/
+│   │   ├── drive-images/
+│   │   │   ├── google-drive.ts
+│   │   │   ├── heic.ts
+│   │   │   ├── store.ts
+│   │   │   └── thumbnail.ts
 │   │   └── auth-token.ts
 │   ├── login/
 │   │   ├── LoginForm.tsx
@@ -149,7 +154,7 @@ photery/
 
 - `app/api/auth/route.ts`: `VIEW_PASSWORD` と入力値を照合し、成功時に生パスワードではなく派生トークンを `site_auth` Cookieへ発行します。
 - `app/api/sync/route.ts`: Google Drive APIで指定フォルダ内の画像を取得し、`drive_images` テーブルへupsertします。`GOOGLE_DRIVE_FOLDER_ID` は1つ、またはカンマ区切りの複数フォルダを指定できます。同期後は現在指定されていないフォルダ由来の古い行を削除し、ギャラリー内容を設定値に合わせます。
-- `app/api/images/[fileId]/route.ts`: Google Driveの非公開画像をサービスアカウント認証で取得し、クライアントへ安全にストリーミングします。
+- `app/api/images/[fileId]/route.ts`: Google Driveの非公開画像をサービスアカウント認証で取得し、クライアントへ安全にストリーミングします。HEIC/HEIFはサーバー側でWebPへ変換して返します。変換できない場合はGoogle Driveの高解像度サムネイル候補へフォールバックします。変換とフォールバックは認証済み・同期済みファイルに限定し、入力サイズ上限を設けています。
 
 ### Components
 
@@ -166,6 +171,10 @@ photery/
 ### Lib
 
 - `app/lib/auth-token.ts`: `VIEW_PASSWORD` と `SITE_AUTH_SECRET` からHMAC-SHA256の派生トークンを生成・検証する共通ヘルパーです。Cookieには生パスワードではなく、この派生トークンを保存します。`SITE_AUTH_SECRET` が未設定の場合もログイン不能にならないよう `VIEW_PASSWORD` をフォールバックに使いますが、本番環境では `SITE_AUTH_SECRET` の設定を推奨します。
+- `app/lib/drive-images/google-drive.ts`: Google DriveのJWT認証、Driveクライアント生成、フォルダID解析、画像一覧取得を担当します。
+- `app/lib/drive-images/store.ts`: Supabaseの `drive_images` 読み書き、upsert、現在の同期対象から外れた画像の削除を担当します。
+- `app/lib/drive-images/heic.ts`: HEIC/HEIF判定、サイズ上限付きバッファリング、WebP変換を担当します。
+- `app/lib/drive-images/thumbnail.ts`: HEIC変換失敗時にGoogle Driveの高解像度サムネイル候補を認証付きで取得します。
 
 ### Routing / Config
 
@@ -180,7 +189,7 @@ photery/
 
 ### Package / Workspace
 
-- `package.json`: 依存関係と `pnpm dev` / `pnpm build` / `pnpm lint` / `pnpm format` / `pnpm format:check` などのスクリプトを管理します。
+- `package.json`: 依存関係と `pnpm dev` / `pnpm build` / `pnpm lint` / `pnpm format` / `pnpm format:check` などのスクリプトを管理します。画像変換には `sharp` を使います。
 - `pnpm-lock.yaml`: pnpmの依存バージョン固定ファイルです。
 - `pnpm-workspace.yaml`: pnpm workspace設定です。
 - `next-env.d.ts`: Next.jsが生成・参照する型定義ファイルです。通常は手動編集しません。

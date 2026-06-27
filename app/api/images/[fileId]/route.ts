@@ -1,6 +1,15 @@
 import { isValidSiteAuthToken, siteAuthCookieName } from "@/app/lib/auth-token";
-import { createClient } from "@supabase/supabase-js";
-import { google } from "googleapis";
+import {
+  createDriveAuth,
+  createDriveClient,
+} from "@/app/lib/drive-images/google-drive";
+import {
+  bufferToArrayBuffer,
+  convertHeicToWebp,
+  isHeicImage,
+} from "@/app/lib/drive-images/heic";
+import { getSyncedDriveImage } from "@/app/lib/drive-images/store";
+import { fetchDriveThumbnail } from "@/app/lib/drive-images/thumbnail";
 import { cookies } from "next/headers";
 import { Readable } from "node:stream";
 
@@ -11,27 +20,6 @@ interface RouteContext {
   params: Promise<{
     fileId: string;
   }>;
-}
-
-interface DriveImageRow {
-  drive_file_id: string;
-}
-
-interface Database {
-  public: {
-    Tables: {
-      drive_images: {
-        Row: DriveImageRow;
-        Insert: DriveImageRow;
-        Update: Partial<DriveImageRow>;
-        Relationships: [];
-      };
-    };
-    Views: Record<string, never>;
-    Functions: Record<string, never>;
-    Enums: Record<string, never>;
-    CompositeTypes: Record<string, never>;
-  };
 }
 
 function getHeaderValue(
@@ -50,46 +38,36 @@ function getHeaderValue(
   return value ?? null;
 }
 
-function createDriveClient() {
-  const email = process.env.GOOGLE_CLIENT_EMAIL;
-  const key = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n").replace(
-    /"/g,
-    "",
-  );
-
-  if (!email || !key) {
-    throw new Error("Google Drive service account credentials are missing.");
-  }
-
-  const auth = new google.auth.JWT({
-    email,
-    key,
-    scopes: ["https://www.googleapis.com/auth/drive.readonly"],
+function createWebpResponse(webpBuffer: Buffer): Response {
+  return new Response(bufferToArrayBuffer(webpBuffer), {
+    headers: new Headers({
+      "Cache-Control": "private, max-age=3600",
+      "Content-Length": webpBuffer.byteLength.toString(),
+      "Content-Type": "image/webp",
+      "X-Content-Type-Options": "nosniff",
+    }),
   });
-
-  return google.drive({ version: "v3", auth });
 }
 
-async function isSyncedDriveImage(fileId: string): Promise<boolean> {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+async function handleHeicImage(
+  stream: Readable,
+  thumbnailUrl: string | null,
+  auth: ReturnType<typeof createDriveAuth>,
+): Promise<Response> {
+  try {
+    return createWebpResponse(await convertHeicToWebp(stream));
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.warn("HEIC conversion failed; trying Drive thumbnail:", message);
 
-  if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error("Supabase credentials are missing.");
-  }
+    const thumbnailResponse = await fetchDriveThumbnail(thumbnailUrl, auth);
 
-  const supabase = createClient<Database>(supabaseUrl, serviceRoleKey);
-  const { data, error } = await supabase
-    .from("drive_images")
-    .select("drive_file_id")
-    .eq("drive_file_id", fileId)
-    .maybeSingle();
+    if (thumbnailResponse) {
+      return thumbnailResponse;
+    }
 
-  if (error) {
     throw error;
   }
-
-  return data !== null;
 }
 
 export async function GET(_request: Request, { params }: RouteContext) {
@@ -111,11 +89,14 @@ export async function GET(_request: Request, { params }: RouteContext) {
   }
 
   try {
-    if (!(await isSyncedDriveImage(fileId))) {
+    const syncedImage = await getSyncedDriveImage(fileId);
+
+    if (!syncedImage) {
       return new Response("Not found", { status: 404 });
     }
 
-    const drive = createDriveClient();
+    const auth = createDriveAuth();
+    const drive = createDriveClient(auth);
     const response = await drive.files.get(
       { fileId, alt: "media" },
       { responseType: "stream" },
@@ -129,12 +110,17 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
     const contentType =
       getHeaderValue(response.headers, "content-type") ?? "image/jpeg";
-    const contentLength = getHeaderValue(response.headers, "content-length");
+
+    if (isHeicImage(contentType, syncedImage.name)) {
+      return handleHeicImage(response.data, syncedImage.thumbnail_url, auth);
+    }
+
     const headers = new Headers({
       "Cache-Control": "private, max-age=3600",
       "Content-Type": contentType,
       "X-Content-Type-Options": "nosniff",
     });
+    const contentLength = getHeaderValue(response.headers, "content-length");
 
     if (contentLength) {
       headers.set("Content-Length", contentLength);
