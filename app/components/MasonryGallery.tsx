@@ -153,7 +153,7 @@ function GalleryCard({ image, index, onOpen }: GalleryCardProps) {
         >
           {image.name}
         </p>
-        <div className="flex flex-wrap gap-2 text-xs font-semibold text-[#68736f]">
+        <div className="flex flex-wrap gap-2 font-sans text-xs font-semibold text-[#68736f]">
           <span>{image.category}</span>
           <span>{getImageDateLabel(image.capturedAt)}</span>
         </div>

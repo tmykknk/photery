@@ -96,7 +96,7 @@ export default async function Home() {
     <main className="min-h-screen bg-[#f7f8f4] px-4 py-8 text-[#161a18] sm:px-6 md:px-10">
       <div className="mx-auto grid max-w-7xl gap-10">
         <header className="flex flex-col items-start gap-3 border-b border-[#d7dedb] pb-8 text-left">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#56707c]">
+          <p className="font-mono text-xs tracking-widest text-[#56707c]">
             Share you my memories.
           </p>
           <h1 className="font-display text-5xl font-semibold tracking-normal text-[#111816] sm:text-7xl">
