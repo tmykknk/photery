@@ -210,7 +210,7 @@ export default function Lightbox({
             <motion.div
               key={image.driveFileId}
               className="relative min-h-0 cursor-grab overflow-hidden rounded-md
-                bg-black/25 active:cursor-grabbing"
+                active:cursor-grabbing"
               drag="x"
               dragConstraints={{ left: 0, right: 0 }}
               dragElastic={0.16}
