@@ -49,6 +49,11 @@ function createWebpResponse(webpBuffer: Buffer): Response {
   });
 }
 
+function logImageProxyError(stage: string, error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`Drive image proxy error (${stage}):`, message);
+}
+
 async function handleHeicImage(
   stream: Readable,
   thumbnailUrl: string | null,
@@ -71,24 +76,24 @@ async function handleHeicImage(
 }
 
 export async function GET(_request: Request, { params }: RouteContext) {
-  const cookieStore = await cookies();
-  const authToken = cookieStore.get(siteAuthCookieName)?.value;
-  const isAuthenticated = await isValidSiteAuthToken(
-    authToken,
-    process.env.VIEW_PASSWORD,
-  );
-
-  if (!isAuthenticated) {
-    return new Response("Unauthorized", { status: 401 });
-  }
-
-  const { fileId } = await params;
-
-  if (!fileId || !/^[\w-]+$/.test(fileId)) {
-    return new Response("Invalid file id", { status: 400 });
-  }
-
   try {
+    const cookieStore = await cookies();
+    const authToken = cookieStore.get(siteAuthCookieName)?.value;
+    const isAuthenticated = await isValidSiteAuthToken(
+      authToken,
+      process.env.VIEW_PASSWORD,
+    );
+
+    if (!isAuthenticated) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+
+    const { fileId } = await params;
+
+    if (!fileId || !/^[\w-]+$/.test(fileId)) {
+      return new Response("Invalid file id", { status: 400 });
+    }
+
     const syncedImage = await getSyncedDriveImage(fileId);
 
     if (!syncedImage) {
@@ -133,8 +138,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
     return new Response(stream, { headers });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    console.error("Drive image proxy error:", message);
+    logImageProxyError("request", error);
     return new Response("Unable to load image", { status: 502 });
   }
 }

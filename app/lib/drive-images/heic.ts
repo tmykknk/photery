@@ -1,6 +1,5 @@
 import "server-only";
 
-import sharp from "sharp";
 import { Readable } from "node:stream";
 
 const maxHeicInputBytes = 80 * 1024 * 1024;
@@ -55,6 +54,7 @@ async function readableToBuffer(
 
 export async function convertHeicToWebp(stream: Readable): Promise<Buffer> {
   const input = await readableToBuffer(stream, maxHeicInputBytes);
+  const { default: sharp } = await import("sharp");
 
   // HEIC files from Apple Photos can exceed libheif's conservative iref limits.
   // The byte cap above keeps conversion bounded before relaxing HEIF parser limits.

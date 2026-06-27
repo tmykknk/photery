@@ -155,7 +155,7 @@ photery/
 
 - `app/api/auth/route.ts`: `VIEW_PASSWORD` と入力値を照合し、成功時に生パスワードではなく派生トークンを `site_auth` Cookieへ発行します。
 - `app/api/sync/route.ts`: Google Drive APIで指定フォルダ内の画像を取得し、`drive_images` テーブルへupsertします。`GOOGLE_DRIVE_FOLDER_ID` は1つ、またはカンマ区切りの複数フォルダを指定できます。同期後は現在指定されていないフォルダ由来の古い行を削除し、ギャラリー内容を設定値に合わせます。
-- `app/api/images/[fileId]/route.ts`: Google Driveの非公開画像をサービスアカウント認証で取得し、クライアントへ安全にストリーミングします。HEIC/HEIFはサーバー側でWebPへ変換して返します。変換できない場合はGoogle Driveの高解像度サムネイル候補へフォールバックします。変換とフォールバックは認証済み・同期済みファイルに限定し、入力サイズ上限を設けています。
+- `app/api/images/[fileId]/route.ts`: Google Driveの非公開画像をサービスアカウント認証で取得し、クライアントへ安全にストリーミングします。HEIC/HEIFはサーバー側でWebPへ変換して返します。`sharp` は変換時だけ遅延読み込みし、変換できない場合や本番環境でnative moduleを読めない場合はGoogle Driveの高解像度サムネイル候補へフォールバックします。変換とフォールバックは認証済み・同期済みファイルに限定し、入力サイズ上限を設けています。
 
 ### Components
 
