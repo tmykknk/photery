@@ -14,9 +14,7 @@ interface MasonryGalleryProps {
 interface GalleryCardProps {
   image: GalleryImage;
   index: number;
-  aspectRatio: number | undefined;
   onOpen: () => void;
-  onRatioChange: (driveFileId: string, aspectRatio: number) => void;
 }
 
 const smoothEase = [0.22, 1, 0.36, 1] as const;
@@ -26,15 +24,14 @@ const cardVariants: Variants = {
   visible: (index: number) => ({
     opacity: 1,
     transition: {
-      delay: Math.min(index, 16) * 0.075,
-      duration: 0.9,
+      delay: Math.min(index, 16) * 0.06,
+      duration: 0.72,
       ease: smoothEase,
     },
   }),
-  exit: { opacity: 0, transition: { duration: 0.28 } },
 };
 
-function getFallbackAspectRatio(index: number): number {
+function getStableAspectRatio(index: number): number {
   const ratios = [0.8, 0.72, 1.18, 1, 0.68, 1.32];
   return ratios[index % ratios.length] ?? 1;
 }
@@ -115,32 +112,22 @@ function IntroMark() {
   );
 }
 
-function GalleryCard({
-  image,
-  index,
-  aspectRatio,
-  onOpen,
-  onRatioChange,
-}: GalleryCardProps) {
-  const displayRatio = aspectRatio ?? getFallbackAspectRatio(index);
-
+function GalleryCard({ image, index, onOpen }: GalleryCardProps) {
   return (
     <motion.button
       type="button"
-      layout
       custom={index}
       variants={cardVariants}
       initial="hidden"
       whileInView="visible"
-      exit="exit"
-      viewport={{ once: true, margin: "0px 0px -10% 0px", amount: 0.18 }}
+      viewport={{ once: true, margin: "0px 0px -8% 0px", amount: 0.12 }}
       whileHover={{ y: -2, transition: { duration: 0.12 } }}
       onClick={onOpen}
       className="cursor-pointer group mb-4 block w-full break-inside-avoid overflow-hidden rounded-none border border-[#d7dedb] bg-white text-left shadow-[0_12px_34px_rgba(17,24,22,0.055)] outline-none transition duration-150 hover:-translate-y-0.5 hover:shadow-[0_18px_44px_rgba(17,24,22,0.105)] focus-visible:ring-2 focus-visible:ring-[#2f5d7c]/25"
     >
       <div
         className="relative w-full overflow-hidden bg-[#e9efec]"
-        style={{ aspectRatio: displayRatio }}
+        style={{ aspectRatio: getStableAspectRatio(index) }}
       >
         {image.imageUrl ? (
           <Image
@@ -152,15 +139,6 @@ function GalleryCard({
             loading="eager"
             fetchPriority={index < 8 ? "high" : "auto"}
             unoptimized
-            onLoad={(event) => {
-              const target = event.currentTarget;
-              if (target.naturalWidth > 0 && target.naturalHeight > 0) {
-                onRatioChange(
-                  image.driveFileId,
-                  target.naturalWidth / target.naturalHeight,
-                );
-              }
-            }}
           />
         ) : (
           <div className="flex h-full items-center justify-center text-sm font-medium text-zinc-400">
@@ -186,17 +164,7 @@ function GalleryCard({
 
 export default function MasonryGallery({ images }: MasonryGalleryProps) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
-  const [aspectRatios, setAspectRatios] = useState<Record<string, number>>({});
   const [showIntro, setShowIntro] = useState(true);
-  const updateAspectRatio = (driveFileId: string, nextRatio: number) => {
-    setAspectRatios((current) => {
-      if (current[driveFileId] === nextRatio) {
-        return current;
-      }
-
-      return { ...current, [driveFileId]: nextRatio };
-    });
-  };
 
   const activeImage =
     activeIndex === null ? null : (images[activeIndex] ?? null);
@@ -257,23 +225,16 @@ export default function MasonryGallery({ images }: MasonryGalleryProps) {
       </AnimatePresence>
 
       {images.length > 0 ? (
-        <motion.section
-          layout
-          className="columns-2 gap-3 sm:gap-4 md:columns-3 lg:columns-4"
-        >
-          <AnimatePresence mode="popLayout">
-            {images.map((image, index) => (
-              <GalleryCard
-                key={image.driveFileId}
-                image={image}
-                index={index}
-                aspectRatio={aspectRatios[image.driveFileId]}
-                onOpen={() => setActiveIndex(index)}
-                onRatioChange={updateAspectRatio}
-              />
-            ))}
-          </AnimatePresence>
-        </motion.section>
+        <section className="columns-2 gap-3 sm:gap-4 md:columns-3 lg:columns-4">
+          {images.map((image, index) => (
+            <GalleryCard
+              key={image.driveFileId}
+              image={image}
+              index={index}
+              onOpen={() => setActiveIndex(index)}
+            />
+          ))}
+        </section>
       ) : (
         <div className="rounded-none border border-dashed border-[#cbd5d1] bg-white px-6 py-12 text-center text-[#68736f]">
           No images to display.
