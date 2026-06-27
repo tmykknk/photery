@@ -1,5 +1,5 @@
 import { isValidSiteAuthToken, siteAuthCookieName } from "@/app/lib/auth-token";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { google } from "googleapis";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
@@ -12,12 +12,73 @@ interface DriveImageFile {
   thumbnailLink: string | null;
 }
 
+interface DriveImageIdRow {
+  drive_file_id: string;
+}
+
+const staleDeleteBatchSize = 100;
+const staleSelectPageSize = 1000;
+
+function getDriveFolderIds(): string[] {
+  return (process.env.GOOGLE_DRIVE_FOLDER_ID ?? "")
+    .split(",")
+    .map((folderId) => folderId.trim())
+    .filter((folderId) => folderId.length > 0);
+}
+
 function isDriveImageFile(file: {
   id?: string | null;
   name?: string | null;
   thumbnailLink?: string | null;
 }): file is DriveImageFile {
   return typeof file.id === "string" && file.id.length > 0;
+}
+
+function chunkArray<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+
+  return chunks;
+}
+
+function isDriveImageIdRow(value: unknown): value is DriveImageIdRow {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "drive_file_id" in value &&
+    typeof value.drive_file_id === "string"
+  );
+}
+
+async function fetchExistingDriveImageIds(
+  supabase: SupabaseClient,
+): Promise<string[]> {
+  const driveFileIds: string[] = [];
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("drive_images")
+      .select("drive_file_id")
+      .range(offset, offset + staleSelectPageSize - 1);
+
+    if (error) {
+      console.error("Supabase取得エラー:", error.message);
+      throw error;
+    }
+
+    const rows = (data ?? []).filter(isDriveImageIdRow);
+    driveFileIds.push(...rows.map((row) => row.drive_file_id));
+
+    if ((data ?? []).length < staleSelectPageSize) {
+      return driveFileIds;
+    }
+
+    offset += staleSelectPageSize;
+  }
 }
 
 export async function GET() {
@@ -33,6 +94,15 @@ export async function GET() {
   }
 
   try {
+    const folderIds = getDriveFolderIds();
+
+    if (folderIds.length === 0) {
+      return NextResponse.json(
+        { success: false, error: "GOOGLE_DRIVE_FOLDER_ID is missing." },
+        { status: 500 },
+      );
+    }
+
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -48,20 +118,32 @@ export async function GET() {
     });
 
     const drive = google.drive({ version: "v3", auth });
-    const files: DriveImageFile[] = [];
-    let pageToken: string | undefined;
+    const filesById = new Map<string, DriveImageFile>();
 
-    do {
-      const res = await drive.files.list({
-        q: `'${process.env.GOOGLE_DRIVE_FOLDER_ID}' in parents and mimeType contains 'image/' and trashed = false`,
-        fields: "nextPageToken, files(id, name, thumbnailLink)",
-        pageSize: 1000,
-        pageToken,
-      });
+    for (const folderId of folderIds) {
+      let pageToken: string | undefined;
 
-      files.push(...(res.data.files ?? []).filter(isDriveImageFile));
-      pageToken = res.data.nextPageToken ?? undefined;
-    } while (pageToken);
+      do {
+        const res = await drive.files.list({
+          q: `'${folderId}' in parents and mimeType contains 'image/' and trashed = false`,
+          fields: "nextPageToken, files(id, name, thumbnailLink)",
+          pageSize: 1000,
+          pageToken,
+        });
+
+        for (const file of res.data.files ?? []) {
+          if (isDriveImageFile(file)) {
+            filesById.set(file.id, file);
+          }
+        }
+
+        pageToken = res.data.nextPageToken ?? undefined;
+      } while (pageToken);
+    }
+
+    const files = [...filesById.values()];
+
+    const syncedFileIds = new Set(files.map((file) => file.id));
 
     if (files.length > 0) {
       const { error } = await supabase.from("drive_images").upsert(
@@ -79,7 +161,32 @@ export async function GET() {
       }
     }
 
-    return NextResponse.json({ success: true, count: files.length });
+    const existingFileIds = await fetchExistingDriveImageIds(supabase);
+    const staleFileIds = existingFileIds.filter(
+      (fileId) => !syncedFileIds.has(fileId),
+    );
+
+    for (const staleFileIdBatch of chunkArray(
+      staleFileIds,
+      staleDeleteBatchSize,
+    )) {
+      const { error } = await supabase
+        .from("drive_images")
+        .delete()
+        .in("drive_file_id", staleFileIdBatch);
+
+      if (error) {
+        console.error("Supabase削除エラー:", error.message);
+        throw error;
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      count: files.length,
+      deletedCount: staleFileIds.length,
+      folderCount: folderIds.length,
+    });
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error("エラー詳細:", errorMessage);
