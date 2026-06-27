@@ -221,7 +221,7 @@ export default function MasonryGallery({ images }: MasonryGalleryProps) {
                 scale: [0.9, 1, 1.02, 1.08],
                 filter: ["blur(12px)", "blur(0px)", "blur(0px)", "blur(8px)"],
               }}
-              transition={{ duration: 1.45, times: [0, 0.28, 0.78, 1] }}
+              transition={{ duration: 2, times: [0, 0.24, 0.82, 1] }}
               onAnimationComplete={() => setShowIntro(false)}
             >
               <IntroMark />

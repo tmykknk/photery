@@ -1,18 +1,7 @@
 import type { Metadata } from "next";
-import {
-  Cormorant_Garamond,
-  Courier_Prime,
-  Google_Sans_Flex,
-} from "next/font/google";
+import { Cormorant_Garamond, Courier_Prime } from "next/font/google";
+import "@fontsource-variable/google-sans-flex";
 import "./globals.css";
-
-const googleSansFlex = Google_Sans_Flex({
-  subsets: ["latin"],
-  variable: "--font-google-sans-flex",
-  display: "swap",
-  weight: "variable",
-  adjustFontFallback: false,
-});
 
 const courierPrime = Courier_Prime({
   subsets: ["latin"],
@@ -42,8 +31,8 @@ export default function RootLayout({
   return (
     <html
       lang="ja"
-      className={`${googleSansFlex.variable} ${courierPrime.variable}
-        ${cormorant.variable} h-full antialiased`}
+      className={`${courierPrime.variable} ${cormorant.variable} h-full
+        antialiased`}
     >
       <body className="flex min-h-full flex-col" suppressHydrationWarning>
         {children}
