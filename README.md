@@ -54,16 +54,11 @@ using (true)
 with check (true);
 ```
 
-## 3. Next.jsの環境設定と配置
+## 3. Next.jsの環境設定
 
 1. `.env.local.sample` を参考に、プロジェクトルートへ `.env.local` を作成
-2. Google Drive、Supabase、閲覧用パスワード（`VIEW_PASSWORD`）、Cookie署名用の `SITE_AUTH_SECRET` を `.env.local` に記述。1つのフォルダだけ表示する場合は `GOOGLE_DRIVE_FOLDER_ID="folder_id"`、複数フォルダをまとめて表示する場合は `GOOGLE_DRIVE_FOLDER_ID="old_folder_id,new_folder_id"` のようにカンマ区切りで指定
-3. `proxy.ts` で未認証時のリダイレクトを制御
-4. `app/login/page.tsx` でパスワード入力画面を表示
-5. `app/api/auth/route.ts` でパスワード検証・クッキー発行
-6. `app/api/sync/route.ts` でGoogle DriveからSupabaseへデータ同期
-7. `app/api/images/[fileId]/route.ts` でGoogle Drive画像を認証付きでストリーミング
-8. `app/page.tsx` と `app/components/*` で画像ギャラリーを表示
+2. Google Drive、Supabase、閲覧用パスワード（`VIEW_PASSWORD`）、Cookie署名用の `SITE_AUTH_SECRET` を `.env.local` に記述
+3. 1つのフォルダだけ表示する場合は `GOOGLE_DRIVE_FOLDER_ID="folder_id"`、複数フォルダをまとめて表示する場合は `GOOGLE_DRIVE_FOLDER_ID="old_folder_id,new_folder_id"` のようにカンマ区切りで指定
 
 ## 4. 動作確認
 
@@ -76,10 +71,9 @@ with check (true);
 ## 5. Vercelにデプロイ
 
 1. GitHubにpush
-2. Vercelでのプロジェクト作成
+2. Vercelでプロジェクトを作成
 3. 対象のGitHubリポジトリをImport
 4. 環境変数の設定値を入力（本番環境では `SITE_AUTH_SECRET` を必ず設定）
-5. HEIC変換で使う `sharp` のLinux x64/libvips optional dependencyが必要なため、`pnpm-workspace.yaml` の `supportedArchitectures` と `allowBuilds`、および `package.json` の `@img/sharp-*` optionalDependencies を維持する
 
 ## 6. コード整形と検証
 
@@ -100,7 +94,9 @@ photery/
 │   │   ├── auth/
 │   │   │   └── route.ts
 │   │   ├── images/
-│   │   │   └── [fileId]/
+│   │   │   ├── [fileId]/
+│   │   │   │   └── route.ts
+│   │   │   └── health/
 │   │   │       └── route.ts
 │   │   └── sync/
 │   │       └── route.ts
@@ -110,12 +106,12 @@ photery/
 │   │   ├── gallery-types.ts
 │   │   └── gallery-utils.ts
 │   ├── lib/
-│   │   ├── drive-images/
-│   │   │   ├── google-drive.ts
-│   │   │   ├── heic.ts
-│   │   │   ├── store.ts
-│   │   │   └── thumbnail.ts
-│   │   └── auth-token.ts
+│   │   ├── auth-token.ts
+│   │   └── drive-images/
+│   │       ├── google-drive.ts
+│   │       ├── heic.ts
+│   │       ├── store.ts
+│   │       └── thumbnail.ts
 │   ├── login/
 │   │   ├── LoginForm.tsx
 │   │   ├── PasswordInput.tsx
@@ -155,7 +151,8 @@ photery/
 
 - `app/api/auth/route.ts`: `VIEW_PASSWORD` と入力値を照合し、成功時に生パスワードではなく派生トークンを `site_auth` Cookieへ発行します。
 - `app/api/sync/route.ts`: Google Drive APIで指定フォルダ内の画像を取得し、`drive_images` テーブルへupsertします。`GOOGLE_DRIVE_FOLDER_ID` は1つ、またはカンマ区切りの複数フォルダを指定できます。同期後は現在指定されていないフォルダ由来の古い行を削除し、ギャラリー内容を設定値に合わせます。
-- `app/api/images/[fileId]/route.ts`: Google Driveの非公開画像をサービスアカウント認証で取得し、クライアントへ安全にストリーミングします。HEIC/HEIFはサーバー側でWebPへ変換して返します。`sharp` は変換時だけ遅延読み込みし、変換できない場合や本番環境でnative moduleを読めない場合はGoogle Driveの高解像度サムネイル候補へフォールバックします。変換とフォールバックは認証済み・同期済みファイルに限定し、入力サイズ上限を設けています。
+- `app/api/images/[fileId]/route.ts`: Google Driveの非公開画像をサービスアカウント認証で取得し、クライアントへ安全にストリーミングします。HEIC/HEIFはWebP変換またはGoogle Driveの高解像度サムネイル候補へフォールバックします。
+- `app/api/images/health/route.ts`: 認証済みユーザー向けの診断APIです。Supabase接続とGoogle Driveサービスアカウント認証を確認します。
 
 ### Components
 
@@ -174,7 +171,7 @@ photery/
 - `app/lib/auth-token.ts`: `VIEW_PASSWORD` と `SITE_AUTH_SECRET` からHMAC-SHA256の派生トークンを生成・検証する共通ヘルパーです。Cookieには生パスワードではなく、この派生トークンを保存します。`SITE_AUTH_SECRET` が未設定の場合もログイン不能にならないよう `VIEW_PASSWORD` をフォールバックに使いますが、本番環境では `SITE_AUTH_SECRET` の設定を推奨します。
 - `app/lib/drive-images/google-drive.ts`: Google DriveのJWT認証、Driveクライアント生成、フォルダID解析、画像一覧取得を担当します。
 - `app/lib/drive-images/store.ts`: Supabaseの `drive_images` 読み書き、upsert、現在の同期対象から外れた画像の削除を担当します。
-- `app/lib/drive-images/heic.ts`: HEIC/HEIF判定、サイズ上限付きバッファリング、WebP変換を担当します。
+- `app/lib/drive-images/heic.ts`: HEIC/HEIF判定、サイズ上限付きバッファリング、WebP変換を担当します。`sharp` は変換時だけ遅延読み込みします。
 - `app/lib/drive-images/thumbnail.ts`: HEIC変換失敗時にGoogle Driveの高解像度サムネイル候補を認証付きで取得します。
 
 ### Routing / Config
