@@ -22,6 +22,12 @@ interface IconButtonProps {
   children: React.ReactNode;
 }
 
+interface ArrowButtonProps {
+  label: string;
+  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  children: React.ReactNode;
+}
+
 const smoothEase = [0.22, 1, 0.36, 1] as const;
 const swipeOffsetThreshold = 80;
 const swipeVelocityThreshold = 420;
@@ -36,6 +42,21 @@ function IconButton({ label, className, onClick, children }: IconButtonProps) {
         border-white/20 bg-white/10 text-white shadow-lg backdrop-blur-md
         transition hover:bg-white/20 focus-visible:outline-2
         focus-visible:outline-white/70 ${className}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ArrowButton({ label, onClick, children }: ArrowButtonProps) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={onClick}
+      className="grid h-10 w-10 shrink-0 place-items-center text-white/82
+        transition hover:text-white focus-visible:outline-2
+        focus-visible:outline-white/70"
     >
       {children}
     </button>
@@ -176,33 +197,6 @@ export default function Lightbox({
             <XIcon />
           </IconButton>
 
-          {totalCount > 1 ? (
-            <>
-              <IconButton
-                label="Previous image"
-                className="absolute top-1/2 left-4 z-20 hidden -translate-y-1/2
-                  md:grid"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onPrevious();
-                }}
-              >
-                <ChevronLeftIcon />
-              </IconButton>
-              <IconButton
-                label="Next image"
-                className="absolute top-1/2 right-4 z-20 hidden -translate-y-1/2
-                  md:grid"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onNext();
-                }}
-              >
-                <ChevronRightIcon />
-              </IconButton>
-            </>
-          ) : null}
-
           <div
             className="grid h-full grid-rows-[1fr_auto] gap-4 px-4 py-16
               md:px-20"
@@ -240,12 +234,39 @@ export default function Lightbox({
                 </div>
               )}
             </motion.div>
-            <div className="mx-auto grid max-w-3xl gap-1 text-center">
-              <p className="text-sm font-medium text-zinc-300">
-                {currentIndex === null
-                  ? ""
-                  : `${currentIndex + 1} / ${totalCount}`}
-              </p>
+            <div
+              className="mx-auto grid w-full max-w-3xl gap-2 text-center"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-center justify-center gap-4">
+                {totalCount > 1 ? (
+                  <ArrowButton
+                    label="Previous image"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onPrevious();
+                    }}
+                  >
+                    <ChevronLeftIcon />
+                  </ArrowButton>
+                ) : null}
+                <p className="min-w-24 text-sm font-medium text-zinc-300">
+                  {currentIndex === null
+                    ? ""
+                    : `${currentIndex + 1} / ${totalCount}`}
+                </p>
+                {totalCount > 1 ? (
+                  <ArrowButton
+                    label="Next image"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onNext();
+                    }}
+                  >
+                    <ChevronRightIcon />
+                  </ArrowButton>
+                ) : null}
+              </div>
               <h2 className="truncate text-lg font-semibold">{image.name}</h2>
             </div>
           </div>
