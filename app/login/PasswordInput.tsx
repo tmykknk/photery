@@ -68,7 +68,7 @@ export default function PasswordInput() {
         name="password"
         autoComplete="current-password"
         placeholder="Password"
-        className="w-full rounded-md border p-2 pr-12 text-center text-sm
+        className="w-full rounded-md border p-2 pr-4 text-center text-sm
           text-black focus:outline-blue-500"
         required
       />

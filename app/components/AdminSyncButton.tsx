@@ -58,7 +58,7 @@ export default function AdminSyncButton() {
 
   const handleSync = async () => {
     setStatus("syncing");
-    setMessage("Google Driveと同期しています...");
+    setMessage("Syncing with Google Drive...");
 
     try {
       const response = await fetch("/api/sync", {
@@ -69,19 +69,17 @@ export default function AdminSyncButton() {
       const result = parseSyncResult(await response.json().catch(() => null));
 
       if (!response.ok || result.success === false) {
-        throw new Error(result.error ?? "同期に失敗しました。");
+        throw new Error(result.error ?? "Sync failed.");
       }
 
       setStatus("success");
-      setMessage(
-        `Sync completed
-         - Added: ${result.count ?? 0}
-         - Deleted: ${result.deletedCount ?? 0}`.replace(/^\s+/gm, ""),
-      );
+      setMessage(`Sync completed
+      - Added: ${result.count ?? 0}
+      - Deleted: ${result.deletedCount ?? 0}`);
       router.refresh();
     } catch (error: unknown) {
       const errorMessage =
-        error instanceof Error ? error.message : "同期に失敗しました。";
+        error instanceof Error ? error.message : "Sync failed.";
 
       setStatus("error");
       setMessage(errorMessage);
@@ -110,9 +108,9 @@ export default function AdminSyncButton() {
           className={
             status === "error"
               ? `max-w-64 text-left text-xs font-semibold whitespace-pre-line
-                text-[#b24a3b] sm:text-right`
+                text-[#b24a3b]`
               : `max-w-64 text-left text-xs font-semibold whitespace-pre-line
-                text-[#56707c] sm:text-right`
+                text-[#56707c]`
           }
         >
           {message}
