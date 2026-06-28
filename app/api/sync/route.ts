@@ -1,4 +1,9 @@
-import { isValidSiteAuthToken, siteAuthCookieName } from "@/app/lib/auth-token";
+import {
+  isValidSiteAdminToken,
+  isValidSiteAuthToken,
+  siteAdminCookieName,
+  siteAuthCookieName,
+} from "@/app/lib/auth-token";
 import {
   getDriveFolderIds,
   listDriveImagesInFolders,
@@ -16,13 +21,23 @@ export const runtime = "nodejs";
 async function syncDriveImages() {
   const cookieStore = await cookies();
   const authToken = cookieStore.get(siteAuthCookieName)?.value;
+  const adminToken = cookieStore.get(siteAdminCookieName)?.value;
   const isAuthenticated = await isValidSiteAuthToken(
     authToken,
     process.env.VIEW_PASSWORD,
   );
+  const isAdmin = await isValidSiteAdminToken(
+    adminToken,
+    process.env.ADMIN_PASSWORD,
+  );
 
   if (!isAuthenticated) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Sync mutates the global gallery table, so only an admin session cookie can run it.
+  if (!isAdmin) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   try {
@@ -57,8 +72,11 @@ async function syncDriveImages() {
   }
 }
 
-export async function GET() {
-  return syncDriveImages();
+export function GET() {
+  return NextResponse.json(
+    { error: "Method Not Allowed" },
+    { status: 405, headers: { Allow: "POST" } },
+  );
 }
 
 export async function POST() {

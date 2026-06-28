@@ -1,6 +1,8 @@
 export const siteAuthCookieName = "site_auth";
+export const siteAdminCookieName = "site_admin";
 
-const tokenPrefix = "photery-site-auth:v2:";
+const siteTokenPrefix = "photery-site-auth:v2:";
+const adminTokenPrefix = "photery-site-admin:v1:";
 
 function toHex(buffer: ArrayBuffer): string {
   return Array.from(new Uint8Array(buffer))
@@ -44,6 +46,10 @@ function getSiteAuthSecret(): string | undefined {
   return process.env.SITE_AUTH_SECRET ?? process.env.VIEW_PASSWORD;
 }
 
+function getAdminAuthSecret(): string | undefined {
+  return process.env.SITE_AUTH_SECRET ?? process.env.ADMIN_PASSWORD;
+}
+
 export async function createSiteAuthToken(password: string): Promise<string> {
   const secret = getSiteAuthSecret();
 
@@ -51,7 +57,17 @@ export async function createSiteAuthToken(password: string): Promise<string> {
     throw new Error("Site auth secret is missing.");
   }
 
-  return createHmacSha256(`${tokenPrefix}${password}`, secret);
+  return createHmacSha256(`${siteTokenPrefix}${password}`, secret);
+}
+
+export async function createSiteAdminToken(password: string): Promise<string> {
+  const secret = getAdminAuthSecret();
+
+  if (!secret) {
+    throw new Error("Admin auth secret is missing.");
+  }
+
+  return createHmacSha256(`${adminTokenPrefix}${password}`, secret);
 }
 
 export async function isValidSiteAuthToken(
@@ -63,6 +79,19 @@ export async function isValidSiteAuthToken(
   }
 
   const expectedToken = await createSiteAuthToken(password);
+
+  return constantTimeEqual(token, expectedToken);
+}
+
+export async function isValidSiteAdminToken(
+  token: string | undefined,
+  password: string | undefined,
+): Promise<boolean> {
+  if (!token || !password) {
+    return false;
+  }
+
+  const expectedToken = await createSiteAdminToken(password);
 
   return constantTimeEqual(token, expectedToken);
 }

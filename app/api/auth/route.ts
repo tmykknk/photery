@@ -1,6 +1,8 @@
 import {
   constantTimeEqual,
+  createSiteAdminToken,
   createSiteAuthToken,
+  siteAdminCookieName,
   siteAuthCookieName,
 } from "@/app/lib/auth-token";
 import { NextResponse } from "next/server";
@@ -8,6 +10,15 @@ import { NextResponse } from "next/server";
 interface AuthRequestBody {
   password: string;
 }
+
+const authCookieMaxAge = 60 * 60 * 24;
+const secureCookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "strict" as const,
+  maxAge: authCookieMaxAge,
+  path: "/",
+};
 
 function isAuthRequestBody(value: unknown): value is AuthRequestBody {
   return (
@@ -47,27 +58,38 @@ async function getPasswordFromRequest(
 export async function POST(request: Request) {
   try {
     const password = await getPasswordFromRequest(request);
-    const correctPassword = process.env.VIEW_PASSWORD;
+    const viewerPassword = process.env.VIEW_PASSWORD;
+    const adminPassword = process.env.ADMIN_PASSWORD;
+    const isViewer =
+      Boolean(password && viewerPassword) &&
+      constantTimeEqual(password ?? "", viewerPassword ?? "");
+    const isAdmin =
+      Boolean(password && adminPassword) &&
+      constantTimeEqual(password ?? "", adminPassword ?? "");
 
-    if (
-      !password ||
-      !correctPassword ||
-      !constantTimeEqual(password, correctPassword)
-    ) {
+    if (!password || (!isViewer && !isAdmin) || !viewerPassword) {
       return redirectAfterPost("/login?error=1");
     }
 
     const response = redirectAfterPost("/");
-    const authToken = await createSiteAuthToken(correctPassword);
+    const authToken = await createSiteAuthToken(viewerPassword);
 
-    // Store a derived token, never the raw viewing password.
-    response.cookies.set(siteAuthCookieName, authToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: 60 * 60 * 24,
-      path: "/",
-    });
+    // Store derived tokens only. The raw viewer/admin passwords never leave the request body.
+    response.cookies.set(siteAuthCookieName, authToken, secureCookieOptions);
+
+    if (isAdmin && adminPassword) {
+      const adminToken = await createSiteAdminToken(adminPassword);
+      response.cookies.set(
+        siteAdminCookieName,
+        adminToken,
+        secureCookieOptions,
+      );
+    } else {
+      response.cookies.set(siteAdminCookieName, "", {
+        ...secureCookieOptions,
+        maxAge: 0,
+      });
+    }
 
     return response;
   } catch (error: unknown) {

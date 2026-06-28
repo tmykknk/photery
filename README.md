@@ -59,7 +59,7 @@ with check (true);
 ## 3. Next.jsの環境設定
 
 1. `.env.local.sample` を参考に、プロジェクトルートへ `.env.local` を作成
-2. Google Drive、Supabase、閲覧用パスワード（`VIEW_PASSWORD`）、Cookie署名用の `SITE_AUTH_SECRET` を `.env.local` に記述
+2. Google Drive、Supabase、閲覧用パスワード（`VIEW_PASSWORD`）、管理者用パスワード（`ADMIN_PASSWORD`）、Cookie署名用の `SITE_AUTH_SECRET` を `.env.local` に記述
 3. 1つのフォルダだけ表示する場合は `GOOGLE_DRIVE_FOLDER_ID="folder_id"`、複数フォルダをまとめて表示する場合は `GOOGLE_DRIVE_FOLDER_ID="old_folder_id,new_folder_id"` のようにカンマ区切りで指定
 
 ## 4. 動作確認
@@ -67,15 +67,15 @@ with check (true);
 1. ターミナルで `pnpm dev` を実行し、開発サーバーを起動（起動済みの場合は再起動）
 2. `http://localhost:3000/` にアクセスし、ログイン画面へリダイレクトされるか確認
 3. 設定したパスワードを入力してログイン
-4. ブラウザで `http://localhost:3000/api/sync` にアクセスし、データ同期を実行（画面に success が出ればOK）
-5. `http://localhost:3000/` に戻り、画像一覧が表示されるか確認。`GOOGLE_DRIVE_FOLDER_ID` を1つに戻して再同期すると、そのフォルダ以外の古い同期済み画像はギャラリーから削除されます
+4. 管理者用パスワード（`ADMIN_PASSWORD`）でログインすると表示される `Sync` ボタンを押し、データ同期を実行（成功メッセージが出ればOK）
+5. 画像一覧が表示されるか確認。`GOOGLE_DRIVE_FOLDER_ID` を1つに戻して再同期すると、そのフォルダ以外の古い同期済み画像はギャラリーから削除されます
 
 ## 5. Vercelにデプロイ
 
 1. GitHubにpush
 2. Vercelでプロジェクトを作成
 3. 対象のGitHubリポジトリをImport
-4. 環境変数の設定値を入力（本番環境では `SITE_AUTH_SECRET` を必ず設定）
+4. 環境変数の設定値を入力（本番環境では `SITE_AUTH_SECRET` と `ADMIN_PASSWORD` を必ず設定）
 
 ## 6. コード整形と検証
 
@@ -103,6 +103,7 @@ photery/
 │   │   └── sync/
 │   │       └── route.ts
 │   ├── components/
+│   │   ├── AdminSyncButton.tsx
 │   │   ├── Lightbox.tsx
 │   │   ├── MasonryGallery.tsx
 │   │   ├── gallery-types.ts
@@ -151,8 +152,8 @@ photery/
 
 ### API Routes
 
-- `app/api/auth/route.ts`: `VIEW_PASSWORD` と入力値を照合し、成功時に生パスワードではなく派生トークンを `site_auth` Cookieへ発行します。
-- `app/api/sync/route.ts`: Google Drive APIで指定フォルダ内の画像を取得し、`drive_images` テーブルへupsertします。`GOOGLE_DRIVE_FOLDER_ID` は1つ、またはカンマ区切りの複数フォルダを指定できます。同期後は現在指定されていないフォルダ由来の古い行を削除し、ギャラリー内容を設定値に合わせます。
+- `app/api/auth/route.ts`: `VIEW_PASSWORD` / `ADMIN_PASSWORD` と入力値を照合し、成功時に生パスワードではなく派生トークンをCookieへ発行します。通常ログインでは `site_auth`、管理者ログインでは `site_auth` と `site_admin` を発行します。
+- `app/api/sync/route.ts`: Google Drive APIで指定フォルダ内の画像を取得し、`drive_images` テーブルへupsertします。通常の `site_auth` Cookieに加えて、`ADMIN_PASSWORD` ログイン時だけ発行される `site_admin` Cookieを検証するため、閲覧者だけでは同期や削除を実行できません。`GOOGLE_DRIVE_FOLDER_ID` は1つ、またはカンマ区切りの複数フォルダを指定できます。同期後は現在指定されていないフォルダ由来の古い行を削除し、ギャラリー内容を設定値に合わせます。
 - `app/api/images/[fileId]/route.ts`: Google Driveの非公開画像をサービスアカウント認証で取得し、クライアントへ安全にストリーミングします。HEIC/HEIFはWebP変換またはGoogle Driveの高解像度サムネイル候補へフォールバックします。
 - `app/api/images/health/route.ts`: 認証済みユーザー向けの診断APIです。Supabase接続とGoogle Driveサービスアカウント認証を確認します。
 
@@ -170,7 +171,7 @@ photery/
 
 ### Lib
 
-- `app/lib/auth-token.ts`: `VIEW_PASSWORD` と `SITE_AUTH_SECRET` からHMAC-SHA256の派生トークンを生成・検証する共通ヘルパーです。Cookieには生パスワードではなく、この派生トークンを保存します。`SITE_AUTH_SECRET` が未設定の場合もログイン不能にならないよう `VIEW_PASSWORD` をフォールバックに使いますが、本番環境では `SITE_AUTH_SECRET` の設定を推奨します。
+- `app/lib/auth-token.ts`: `VIEW_PASSWORD` / `ADMIN_PASSWORD` と `SITE_AUTH_SECRET` からHMAC-SHA256の派生トークンを生成・検証する共通ヘルパーです。Cookieには生パスワードではなく、この派生トークンを保存します。`SITE_AUTH_SECRET` が未設定の場合もログイン不能にならないよう各パスワードをフォールバックに使いますが、本番環境では `SITE_AUTH_SECRET` の設定を推奨します。
 - `app/lib/drive-images/google-drive.ts`: Google DriveのJWT認証、Driveクライアント生成、フォルダID解析、画像一覧取得を担当します。
 - `app/lib/drive-images/store.ts`: Supabaseの `drive_images` 読み書き、upsert、現在の同期対象から外れた画像の削除を担当します。
 - `app/lib/drive-images/heic.ts`: HEIC/HEIF判定、サイズ上限付きバッファリング、WebP変換を担当します。`sharp` は変換時だけ遅延読み込みします。
@@ -196,5 +197,5 @@ photery/
 
 ### Environment / Git
 
-- `.env.local.sample`: 必要な環境変数名を示すサンプルです。秘密値はここに書きません。
+- `.env.local.sample`: 必要な環境変数名を示すサンプルです。秘密値はここに書きません。`ADMIN_PASSWORD` は管理者ログインと同期ボタンの表示・実行権限に使います。
 - `.gitignore`: `.env.local` やビルド成果物など、Git管理しないファイルを指定します。

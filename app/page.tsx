@@ -1,4 +1,10 @@
+import {
+  isValidSiteAdminToken,
+  siteAdminCookieName,
+} from "@/app/lib/auth-token";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { cookies } from "next/headers";
+import AdminSyncButton from "./components/AdminSyncButton";
 import MasonryGallery from "./components/MasonryGallery";
 import type { GalleryImage } from "./components/gallery-types";
 
@@ -122,6 +128,11 @@ export default async function Home() {
   }
 
   const galleryImages = images.map(normalizeImage);
+  const cookieStore = await cookies();
+  const isAdmin = await isValidSiteAdminToken(
+    cookieStore.get(siteAdminCookieName)?.value,
+    process.env.ADMIN_PASSWORD,
+  );
 
   return (
     <main
@@ -130,18 +141,21 @@ export default async function Home() {
     >
       <div className="mx-auto grid max-w-7xl gap-10">
         <header
-          className="flex flex-col items-start gap-3 border-b border-[#d7dedb]
-            pb-8 text-left"
+          className="flex flex-col items-start justify-between gap-5 border-b
+            border-[#d7dedb] pb-8 text-left sm:flex-row sm:items-end"
         >
-          <p className="font-mono text-xs tracking-widest text-[#56707c]">
-            Share you my memories.
-          </p>
-          <h1
-            className="font-display text-5xl font-semibold tracking-normal
-              text-[#111816] sm:text-7xl"
-          >
-            Photery
-          </h1>
+          <div className="grid gap-3">
+            <p className="font-mono text-xs tracking-widest text-[#56707c]">
+              Share you my memories.
+            </p>
+            <h1
+              className="font-display text-5xl font-semibold tracking-normal
+                text-[#111816] sm:text-7xl"
+            >
+              Photery
+            </h1>
+          </div>
+          {isAdmin ? <AdminSyncButton /> : null}
         </header>
 
         {galleryImages.length > 0 ? (
