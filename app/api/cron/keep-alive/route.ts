@@ -9,14 +9,11 @@ export async function GET(request: Request) {
   const cronSecret = process.env.CRON_SECRET;
 
   if (!cronSecret) {
-    console.warn("WARNING: CRON_SECRET is not set in environment variables.");
-    if (process.env.NODE_ENV === "development") {
-      console.log("Local development mode: bypassing CRON_SECRET check.");
-    } else {
-      console.error("Production mode: CRON_SECRET is required but missing. Request rejected.");
-      return new Response("Unauthorized: CRON_SECRET is missing", { status: 401 });
-    }
-  } else if (authHeader !== `Bearer ${cronSecret}`) {
+    console.error("CRON_SECRET environment variable is missing.");
+    return new Response("Unauthorized: CRON_SECRET is not configured", { status: 401 });
+  }
+
+  if (authHeader !== `Bearer ${cronSecret}`) {
     console.warn(
       `Unauthorized cron access attempt. Received header: ${
         authHeader ? "present (value masked)" : "missing"
