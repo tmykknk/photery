@@ -76,6 +76,8 @@ with check (true);
 2. Vercelでプロジェクトを作成
 3. 対象のGitHubリポジトリをImport
 4. 環境変数の設定値を入力（本番環境では `SITE_AUTH_SECRET` と `ADMIN_PASSWORD` を必ず設定）
+5. Supabaseの自動停止を防ぐため、Vercelの **Settings > Environment Variables** に `CRON_SECRET` を追加（ランダムな長めの文字列を設定）
+
 
 ## 6. コード整形と検証
 
@@ -95,6 +97,9 @@ photery/
 │   ├── api/
 │   │   ├── auth/
 │   │   │   └── route.ts
+│   │   ├── cron/
+│   │   │   └── keep-alive/
+│   │   │       └── route.ts
 │   │   ├── images/
 │   │   │   ├── [fileId]/
 │   │   │   │   └── route.ts
@@ -154,6 +159,7 @@ photery/
 
 - `app/api/auth/route.ts`: `VIEW_PASSWORD` / `ADMIN_PASSWORD` と入力値を照合し、成功時に生パスワードではなく派生トークンをCookieへ発行します。通常ログインでは `site_auth`、管理者ログインでは `site_auth` と `site_admin` を発行します。
 - `app/api/sync/route.ts`: Google Drive APIで指定フォルダ内の画像を取得し、`drive_images` テーブルへupsertします。通常の `site_auth` Cookieに加えて、`ADMIN_PASSWORD` ログイン時だけ発行される `site_admin` Cookieを検証するため、閲覧者だけでは同期や削除を実行できません。`GOOGLE_DRIVE_FOLDER_ID` は1つ、またはカンマ区切りの複数フォルダを指定できます。同期後は現在指定されていないフォルダ由来の古い行を削除し、ギャラリー内容を設定値に合わせます。
+- `app/api/cron/keep-alive/route.ts`: Supabaseの無料プラン自動停止を防ぐためのKeep-alive用APIです。Vercel Cronから定期的に実行され、環境変数 `CRON_SECRET` に基づく認証が行われます。
 - `app/api/images/[fileId]/route.ts`: Google Driveの非公開画像をサービスアカウント認証で取得し、クライアントへ安全にストリーミングします。HEIC/HEIFはWebP変換またはGoogle Driveの高解像度サムネイル候補へフォールバックします。
 - `app/api/images/health/route.ts`: 認証済みユーザー向けの診断APIです。Supabase接続とGoogle Driveサービスアカウント認証を確認します。
 
@@ -186,7 +192,7 @@ photery/
 - `postcss.config.mjs`: Tailwind CSS v4向けのPostCSS設定です。
 - `prettier.config.mjs`: Prettier本体とTailwind/className整形プラグインの設定です。
 - `.prettierignore`: Prettierの対象外にする生成物やローカル設定ファイルを指定します。
-- `vercel.json`: Vercelデプロイ時のプロジェクト設定です。
+- `vercel.json`: Vercelデプロイ時のプロジェクト設定です。SupabaseのKeep-alive用Cron Jobスケジュール（3日おき）が定義されています。
 
 ### Package / Workspace
 
