@@ -78,6 +78,18 @@ with check (true);
 4. 環境変数の設定値を入力（本番環境では `SITE_AUTH_SECRET` と `ADMIN_PASSWORD` を必ず設定）
 5. Supabaseの自動停止を防ぐため、Vercelの **Settings > Environment Variables** に `CRON_SECRET` を追加（ランダムな長めの文字列を設定）
 
+### Firewall Rules
+
+Vercelの **Firewall** で、次のCustom Ruleを設定します。
+
+| ルール名                         | 条件                                                                                      | アクション                                                             | 目的                                                                          |
+| -------------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `Brute Force Attacks Protection` | `Request Path equals /api/auth`                                                           | Fixed Window: 60秒、10リクエスト、キー: IP Address。上限超過時は `429` | パスワード総当たり攻撃を抑制する                                              |
+| `Allow Access Only Japan`        | `Country does not equal Japan` **AND** `Request Path does not equal /api/cron/keep-alive` | Deny                                                                   | 日本国外からのアクセスを拒否しつつ、Vercel CronのKeep-alive実行だけを許可する |
+
+Vercel Cronは日本国外のVercel基盤から実行されるため、`/api/cron/keep-alive` を国別拒否の対象外にします。このパスは `CRON_SECRET` のBearer認証を必須としているため、パスを例外にしても第三者は実行できません。
+
+Cronの動作確認は **Settings > Cron Jobs** で `/api/cron/keep-alive` の `Run` を実行し、`View Logs` でHTTP `200` と `Keep-alive: Supabase connection pinged successfully.` を確認します。
 
 ## 6. コード整形と検証
 
