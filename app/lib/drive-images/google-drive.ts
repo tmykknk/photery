@@ -6,6 +6,13 @@ export interface DriveImageFile {
   id: string;
   name: string | null;
   thumbnailLink: string | null;
+  tags: string[];
+}
+
+interface DriveImageMetadata {
+  id: string;
+  name: string | null;
+  thumbnailLink: string | null;
 }
 
 export type GoogleDriveAuth = ReturnType<typeof createDriveAuth>;
@@ -43,7 +50,7 @@ function isDriveImageFile(file: {
   id?: string | null;
   name?: string | null;
   thumbnailLink?: string | null;
-}): file is DriveImageFile {
+}): file is DriveImageMetadata {
   return typeof file.id === "string" && file.id.length > 0;
 }
 
@@ -55,6 +62,17 @@ export async function listDriveImagesInFolders(
   const filesById = new Map<string, DriveImageFile>();
 
   for (const folderId of folderIds) {
+    const folderResponse = await drive.files.get({
+      fileId: folderId,
+      fields: "id, name",
+      supportsAllDrives: true,
+    });
+    const folderName = folderResponse.data.name?.trim();
+
+    if (!folderName) {
+      throw new Error(`Google Drive folder name is missing: ${folderId}`);
+    }
+
     let pageToken: string | undefined;
 
     do {
@@ -67,7 +85,15 @@ export async function listDriveImagesInFolders(
 
       for (const file of res.data.files ?? []) {
         if (isDriveImageFile(file)) {
-          filesById.set(file.id, file);
+          const existingFile = filesById.get(file.id);
+
+          if (existingFile) {
+            if (!existingFile.tags.includes(folderName)) {
+              existingFile.tags.push(folderName);
+            }
+          } else {
+            filesById.set(file.id, { ...file, tags: [folderName] });
+          }
         }
       }
 

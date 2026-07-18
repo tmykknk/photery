@@ -41,13 +41,18 @@ create table if not exists public.drive_images (
   drive_file_id text primary key,
   name text,
   thumbnail_url text,
+  tags text[] not null default '{}'::text[],
   created_at timestamptz default now()
 );
 
--- 2. 行レベルセキュリティ（RLS）を有効化して警告を解決
+-- 2. 既存テーブルにもフォルダ名タグ用カラムを追加
+alter table public.drive_images
+add column if not exists tags text[] not null default '{}'::text[];
+
+-- 3. 行レベルセキュリティ（RLS）を有効化して警告を解決
 alter table public.drive_images enable row level security;
 
--- 3. Next.jsのサーバー（service_role）からの全操作を許可するポリシー
+-- 4. Next.jsのサーバー（service_role）からの全操作を許可するポリシー
 create policy "Allow all operations for service role"
 on public.drive_images
 for all
@@ -60,7 +65,7 @@ with check (true);
 
 1. `.env.local.sample` を参考に、プロジェクトルートへ `.env.local` を作成
 2. Google Drive、Supabase、閲覧用パスワード（`VIEW_PASSWORD`）、管理者用パスワード（`ADMIN_PASSWORD`）、Cookie署名用の `SITE_AUTH_SECRET` を `.env.local` に記述
-3. 1つのフォルダだけ表示する場合は `GOOGLE_DRIVE_FOLDER_ID="folder_id"`、複数フォルダをまとめて表示する場合は `GOOGLE_DRIVE_FOLDER_ID="old_folder_id,new_folder_id"` のようにカンマ区切りで指定
+3. 1つのフォルダだけ表示する場合は `GOOGLE_DRIVE_FOLDER_ID="folder_id"`、複数フォルダをまとめて表示する場合は `GOOGLE_DRIVE_FOLDER_ID="old_folder_id,new_folder_id"` のようにIDだけをカンマ区切りで指定。各フォルダ名は同期時にGoogle Driveから取得され、ギャラリーのタグとして使われます
 
 ## 4. 動作確認
 
@@ -68,7 +73,7 @@ with check (true);
 2. `http://localhost:3000/` にアクセスし、ログイン画面へリダイレクトされるか確認
 3. 設定したパスワードを入力してログイン
 4. 管理者用パスワード（`ADMIN_PASSWORD`）でログインすると表示される `Sync` ボタンを押し、データ同期を実行（成功メッセージが出ればOK）
-5. 画像一覧が表示されるか確認。`GOOGLE_DRIVE_FOLDER_ID` を1つに戻して再同期すると、そのフォルダ以外の古い同期済み画像はギャラリーから削除されます
+5. 画像一覧と、ヘッダーの「すべて」およびフォルダ名タグが表示されるか確認。`GOOGLE_DRIVE_FOLDER_ID` を1つに戻して再同期すると、そのフォルダ以外の古い同期済み画像はギャラリーから削除されます
 
 ## 5. Vercelにデプロイ
 
@@ -170,14 +175,15 @@ photery/
 ### API Routes
 
 - `app/api/auth/route.ts`: `VIEW_PASSWORD` / `ADMIN_PASSWORD` と入力値を照合し、成功時に生パスワードではなく派生トークンをCookieへ発行します。通常ログインでは `site_auth`、管理者ログインでは `site_auth` と `site_admin` を発行します。
-- `app/api/sync/route.ts`: Google Drive APIで指定フォルダ内の画像を取得し、`drive_images` テーブルへupsertします。通常の `site_auth` Cookieに加えて、`ADMIN_PASSWORD` ログイン時だけ発行される `site_admin` Cookieを検証するため、閲覧者だけでは同期や削除を実行できません。`GOOGLE_DRIVE_FOLDER_ID` は1つ、またはカンマ区切りの複数フォルダを指定できます。同期後は現在指定されていないフォルダ由来の古い行を削除し、ギャラリー内容を設定値に合わせます。
+- `app/api/sync/route.ts`: Google Drive APIで指定フォルダ内の画像とフォルダ名を取得し、フォルダ名をタグとして `drive_images` テーブルへupsertします。通常の `site_auth` Cookieに加えて、`ADMIN_PASSWORD` ログイン時だけ発行される `site_admin` Cookieを検証するため、閲覧者だけでは同期や削除を実行できません。`GOOGLE_DRIVE_FOLDER_ID` は1つ、またはカンマ区切りの複数フォルダIDを指定できます。同期後は現在指定されていないフォルダ由来の古い行を削除し、ギャラリー内容を設定値に合わせます。
 - `app/api/cron/keep-alive/route.ts`: Supabaseの無料プラン自動停止を防ぐためのKeep-alive用APIです。Vercel Cronから定期的に実行され、環境変数 `CRON_SECRET` に基づく認証が行われます。
 - `app/api/images/[fileId]/route.ts`: Google Driveの非公開画像をサービスアカウント認証で取得し、クライアントへ安全にストリーミングします。HEIC/HEIFはWebP変換またはGoogle Driveの高解像度サムネイル候補へフォールバックします。
 - `app/api/images/health/route.ts`: 認証済みユーザー向けの診断APIです。Supabase接続とGoogle Driveサービスアカウント認証を確認します。
 
 ### Components
 
-- `app/components/MasonryGallery.tsx`: Masonryレイアウト、カード表示、イントロアニメーション、カードクリック時のLightbox起動を担当します。
+- `app/components/GalleryShell.tsx`: ヘッダー、フォルダ名タグによる表示切替、管理者用Syncボタンを担当します。
+- `app/components/MasonryGallery.tsx`: Masonryレイアウト、フォルダタグ付きカード表示、イントロアニメーション、カードクリック時のLightbox起動を担当します。
 - `app/components/Lightbox.tsx`: 全画面画像モーダルです。キーボード操作、左右ナビゲーション、モバイルスワイプに対応します。
 - `app/components/gallery-types.ts`: ギャラリーで使う共有TypeScript型を定義します。
 - `app/components/gallery-utils.ts`: JST基準の日付表示など、ギャラリー用の小さなユーティリティ関数を定義します。

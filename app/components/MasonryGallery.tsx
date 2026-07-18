@@ -166,7 +166,11 @@ function GalleryCard({ image, index, onOpen }: GalleryCardProps) {
           className="flex flex-wrap gap-2 font-sans text-xs font-semibold
             text-[#68736f]"
         >
-          <span>{image.category}</span>
+          {image.tags.length > 0 ? (
+            image.tags.map((tag) => <span key={tag}>#{tag}</span>)
+          ) : (
+            <span>#未分類</span>
+          )}
           <span>{getImageDateLabel(image.capturedAt)}</span>
         </div>
       </div>
