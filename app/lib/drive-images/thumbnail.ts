@@ -1,13 +1,11 @@
 import "server-only";
 
 import type { GoogleDriveAuth } from "./google-drive";
-import { bufferToArrayBuffer } from "./heic";
 
 const defaultPreferredThumbnailSize = 2048;
 
 interface DriveThumbnailOptions {
   preferredSize?: number;
-  convertToWebp?: boolean;
 }
 
 function isAllowedGoogleThumbnailUrl(thumbnailUrl: string): boolean {
@@ -58,7 +56,6 @@ function getGoogleThumbnailCandidates(
 async function fetchAuthorizedImage(
   imageUrl: string,
   token: string,
-  options: Required<DriveThumbnailOptions>,
 ): Promise<Response | null> {
   const response = await fetch(imageUrl, {
     headers: { Authorization: `Bearer ${token}` },
@@ -74,32 +71,22 @@ async function fetchAuthorizedImage(
     return null;
   }
 
-  const body = Buffer.from(await response.arrayBuffer());
-  let output: Buffer<ArrayBufferLike> = body;
-  let outputContentType = contentType;
-
-  if (options.convertToWebp) {
-    const { default: sharp } = await import("sharp");
-    output = await sharp(body, { autoOrient: true })
-      .resize({
-        width: options.preferredSize,
-        height: options.preferredSize,
-        fit: "inside",
-        withoutEnlargement: true,
-      })
-      .webp({ quality: 82, effort: 3 })
-      .toBuffer();
-    outputContentType = "image/webp";
+  if (!response.body) {
+    return null;
   }
 
   const headers = new Headers({
     "Cache-Control": "private, max-age=3600",
-    "Content-Length": output.byteLength.toString(),
-    "Content-Type": outputContentType,
+    "Content-Type": contentType,
     "X-Content-Type-Options": "nosniff",
   });
+  const contentLength = response.headers.get("content-length");
 
-  return new Response(bufferToArrayBuffer(output), { headers });
+  if (contentLength) {
+    headers.set("Content-Length", contentLength);
+  }
+
+  return new Response(response.body, { headers });
 }
 
 export async function fetchDriveThumbnail(
@@ -119,27 +106,25 @@ export async function fetchDriveThumbnail(
     return null;
   }
 
-  const resolvedOptions: Required<DriveThumbnailOptions> = {
-    preferredSize: options.preferredSize ?? defaultPreferredThumbnailSize,
-    convertToWebp: options.convertToWebp ?? false,
-  };
+  const preferredSize = options.preferredSize ?? defaultPreferredThumbnailSize;
 
   for (const candidateUrl of getGoogleThumbnailCandidates(
     thumbnailUrl,
-    resolvedOptions.preferredSize,
+    preferredSize,
   )) {
     if (!isAllowedGoogleThumbnailUrl(candidateUrl)) {
       continue;
     }
 
-    const imageResponse = await fetchAuthorizedImage(
-      candidateUrl,
-      token,
-      resolvedOptions,
-    );
+    try {
+      const imageResponse = await fetchAuthorizedImage(candidateUrl, token);
 
-    if (imageResponse) {
-      return imageResponse;
+      if (imageResponse) {
+        return imageResponse;
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn("Drive thumbnail candidate failed:", message);
     }
   }
 

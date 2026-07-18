@@ -43,26 +43,33 @@ const cardVariants: Variants = {
   }),
 };
 
-function getStableAspectRatio(index: number): number {
-  const ratios = [0.8, 0.72, 1.18, 1, 0.68, 1.32];
-  return ratios[index % ratios.length] ?? 1;
+function getStableAspectRatio(image: GalleryImage): number {
+  const ratios = [0.68, 0.74, 0.8, 0.9, 1, 1.12, 1.22, 1.32];
+  let hash = 2166136261;
+
+  for (const character of image.driveFileId) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return ratios[(hash >>> 0) % ratios.length] ?? 1;
 }
 
-function getEstimatedCardHeight(index: number): number {
-  return 1 / getStableAspectRatio(index) + 0.24;
+function getEstimatedCardHeight(image: GalleryImage): number {
+  return 1 / getStableAspectRatio(image) + 0.24;
 }
 
 function getLikelyColumnStartIndices(
-  itemCount: number,
+  images: GalleryImage[],
   columnCount: number,
 ): number[] {
+  const itemCount = images.length;
+
   if (itemCount === 0) {
     return [];
   }
 
-  const estimatedHeights = Array.from({ length: itemCount }, (_, index) =>
-    getEstimatedCardHeight(index),
-  );
+  const estimatedHeights = images.map(getEstimatedCardHeight);
   const totalHeight = estimatedHeights.reduce((sum, height) => sum + height, 0);
   const startIndices = [0];
   let cumulativeHeight = 0;
@@ -85,17 +92,15 @@ function getLikelyColumnStartIndices(
 }
 
 function getColumnCandidateIndices(
-  itemCount: number,
+  images: GalleryImage[],
   beforeStart: number,
   afterStart: number,
 ): Set<number> {
+  const itemCount = images.length;
   const candidates = new Set<number>();
 
   for (const columnCount of supportedColumnCounts) {
-    for (const startIndex of getLikelyColumnStartIndices(
-      itemCount,
-      columnCount,
-    )) {
+    for (const startIndex of getLikelyColumnStartIndices(images, columnCount)) {
       for (let offset = -beforeStart; offset <= afterStart; offset += 1) {
         const candidateIndex = startIndex + offset;
 
@@ -211,7 +216,7 @@ function GalleryCard({
     >
       <div
         className="relative w-full overflow-hidden bg-[#e9efec]"
-        style={{ aspectRatio: getStableAspectRatio(index) }}
+        style={{ aspectRatio: getStableAspectRatio(image) }}
       >
         {image.thumbnailUrl ? (
           <Image
@@ -273,16 +278,8 @@ function MasonrySections({
     ? Math.min(visibleCount, images.length)
     : images.length;
   const renderedImages = images.slice(0, renderedCount);
-  const eagerImageIndices = getColumnCandidateIndices(
-    renderedImages.length,
-    1,
-    5,
-  );
-  const priorityImageIndices = getColumnCandidateIndices(
-    renderedImages.length,
-    1,
-    1,
-  );
+  const eagerImageIndices = getColumnCandidateIndices(renderedImages, 1, 5);
+  const priorityImageIndices = getColumnCandidateIndices(renderedImages, 1, 1);
 
   useEffect(() => {
     if (!progressivelyRender || renderedCount >= images.length) {

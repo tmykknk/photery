@@ -6,7 +6,6 @@ import {
 import {
   bufferToArrayBuffer,
   convertHeicToWebp,
-  convertImageToCardWebp,
   isHeicImage,
 } from "@/app/lib/drive-images/heic";
 import { getSyncedDriveImage } from "@/app/lib/drive-images/store";
@@ -109,7 +108,7 @@ export async function GET(request: Request, { params }: RouteContext) {
       const thumbnailResponse = await fetchDriveThumbnail(
         syncedImage.thumbnail_url,
         auth,
-        { preferredSize: 800, convertToWebp: true },
+        { preferredSize: 800 },
       );
 
       if (thumbnailResponse) {
@@ -131,10 +130,6 @@ export async function GET(request: Request, { params }: RouteContext) {
 
     const contentType =
       getHeaderValue(response.headers, "content-type") ?? "image/jpeg";
-
-    if (isCardThumbnail) {
-      return createWebpResponse(await convertImageToCardWebp(response.data));
-    }
 
     if (isHeicImage(contentType, syncedImage.name)) {
       return handleHeicImage(response.data, syncedImage.thumbnail_url, auth);
