@@ -49,10 +49,17 @@ create table if not exists public.drive_images (
 alter table public.drive_images
 add column if not exists tags text[] not null default '{}'::text[];
 
--- 3. 行レベルセキュリティ（RLS）を有効化して警告を解決
+-- 3. 全件取得の順序を安定させ、画像数増加時の取得を支える複合インデックス
+create index if not exists drive_images_created_at_id_idx
+on public.drive_images (created_at asc, drive_file_id asc);
+
+-- 4. 統計情報を更新して、クエリプランへインデックスを反映
+analyze public.drive_images;
+
+-- 5. 行レベルセキュリティ（RLS）を有効化して警告を解決
 alter table public.drive_images enable row level security;
 
--- 4. Next.jsのサーバー（service_role）からの全操作を許可するポリシー
+-- 6. Next.jsのサーバー（service_role）からの全操作を許可するポリシー
 create policy "Allow all operations for service role"
 on public.drive_images
 for all
@@ -60,6 +67,8 @@ to service_role
 using (true)
 with check (true);
 ```
+
+タグ絞り込みはクライアント側で行うため、`tags` 用のGINインデックスは追加しません。SQLでタグ検索する構成へ変更した時点で検討します。
 
 ## 3. Next.jsの環境設定
 
@@ -73,7 +82,7 @@ with check (true);
 2. `http://localhost:3000/` にアクセスし、ログイン画面へリダイレクトされるか確認
 3. 設定したパスワードを入力してログイン
 4. 管理者用パスワード（`ADMIN_PASSWORD`）でログインすると表示される `Sync` ボタンを押し、データ同期を実行（成功メッセージが出ればOK）
-5. 画像一覧と、ヘッダーの「すべて」およびフォルダ名タグが表示されるか確認。`GOOGLE_DRIVE_FOLDER_ID` を1つに戻して再同期すると、そのフォルダ以外の古い同期済み画像はギャラリーから削除されます
+5. 画像一覧と、ヘッダーの「すべて」およびフォルダ名タグが表示されるか確認。「すべて」は最初の120枚を表示し、下端へ近づくと120枚ずつ自動で追加します。フォルダ名タグを選択した場合は、そのフォルダの画像を全件表示します。`GOOGLE_DRIVE_FOLDER_ID` を1つに戻して再同期すると、そのフォルダ以外の古い同期済み画像はギャラリーから削除されます
 
 ## 5. Vercelにデプロイ
 
@@ -168,7 +177,7 @@ photery/
 
 - `app/layout.tsx`: アプリ全体のHTML構造、メタデータ、フォント設定を定義します。
 - `app/globals.css`: Tailwind CSSの読み込み、グローバルカラー、フォント変数、基本背景を定義します。
-- `app/page.tsx`: Supabaseから画像メタデータを取得し、表示名の拡張子除去や画像プロキシURLの生成を行ってギャラリーへ渡します。
+- `app/page.tsx`: Supabaseから画像メタデータを1,000件単位で全件取得し、`created_at` と `drive_file_id` で順序を安定させます。表示名の拡張子除去や画像プロキシURLの生成を行ってギャラリーへ渡します。
 - `app/login/page.tsx`: 閲覧用パスワード入力画面です。認証済みの場合はギャラリーへ戻します。
 - `app/favicon.ico`: ブラウザタブなどで使われるファビコンです。
 
@@ -183,7 +192,7 @@ photery/
 ### Components
 
 - `app/components/GalleryShell.tsx`: ヘッダー、フォルダ名タグによる表示切替、管理者用Syncボタンを担当します。
-- `app/components/MasonryGallery.tsx`: Masonryレイアウト、フォルダタグ付きカード表示、イントロアニメーション、カードクリック時のLightbox起動を担当します。CSS columnsの列先頭候補だけを即時表示・高優先度にし、それ以外の画像はlazy読み込みします。
+- `app/components/MasonryGallery.tsx`: Masonryレイアウト、フォルダタグ付きカード表示、イントロアニメーション、カードクリック時のLightbox起動を担当します。「すべて」は単一のアシンメトリーなMasonryへ120枚ずつ自動追加し、初期DOMの肥大化を抑えます。フォルダ名タグ選択時は対象画像を同じMasonryへ全件表示します。列先頭候補だけを即時表示・高優先度にし、それ以外の画像はlazy読み込みします。
 - `app/components/Lightbox.tsx`: 全画面画像モーダルです。キーボード操作、左右ナビゲーション、モバイルスワイプに対応します。
 - `app/components/gallery-types.ts`: ギャラリーで使う共有TypeScript型を定義します。
 - `app/components/gallery-utils.ts`: JST基準の日付表示など、ギャラリー用の小さなユーティリティ関数を定義します。

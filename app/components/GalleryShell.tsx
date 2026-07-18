@@ -81,7 +81,10 @@ export default function GalleryShell({ images, isAdmin }: GalleryShellProps) {
       </header>
 
       {images.length > 0 ? (
-        <MasonryGallery images={filteredImages} />
+        <MasonryGallery
+          images={filteredImages}
+          progressivelyRender={activeTag === null}
+        />
       ) : (
         <div
           className="rounded-none border border-dashed border-[#cbd5d1] bg-white

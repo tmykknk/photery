@@ -2,13 +2,20 @@
 
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import Image from "next/image";
-import { useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Lightbox from "./Lightbox";
 import type { GalleryImage } from "./gallery-types";
 import { getImageDateLabel } from "./gallery-utils";
 
 interface MasonryGalleryProps {
   images: GalleryImage[];
+  progressivelyRender: boolean;
+}
+
+interface MasonrySectionsProps {
+  images: GalleryImage[];
+  progressivelyRender: boolean;
+  onOpen: (index: number) => void;
 }
 
 interface GalleryCardProps {
@@ -22,6 +29,7 @@ interface GalleryCardProps {
 
 const smoothEase = [0.22, 1, 0.36, 1] as const;
 const supportedColumnCounts = [2, 3, 4] as const;
+const progressiveBatchSize = 120;
 
 const cardVariants: Variants = {
   hidden: { opacity: 0 },
@@ -250,20 +258,95 @@ function GalleryCard({
   );
 }
 
-export default function MasonryGallery({ images }: MasonryGalleryProps) {
+function MasonrySections({
+  images,
+  progressivelyRender,
+  onOpen,
+}: MasonrySectionsProps) {
+  const [visibleCount, setVisibleCount] = useState(() =>
+    progressivelyRender
+      ? Math.min(progressiveBatchSize, images.length)
+      : images.length,
+  );
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+  const renderedCount = progressivelyRender
+    ? Math.min(visibleCount, images.length)
+    : images.length;
+  const renderedImages = images.slice(0, renderedCount);
+  const eagerImageIndices = getColumnCandidateIndices(
+    renderedImages.length,
+    1,
+    5,
+  );
+  const priorityImageIndices = getColumnCandidateIndices(
+    renderedImages.length,
+    1,
+    1,
+  );
+
+  useEffect(() => {
+    if (!progressivelyRender || renderedCount >= images.length) {
+      return;
+    }
+
+    const loadMoreElement = loadMoreRef.current;
+
+    if (!loadMoreElement) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          setVisibleCount((current) =>
+            Math.min(current + progressiveBatchSize, images.length),
+          );
+        }
+      },
+      { rootMargin: "1000px 0px" },
+    );
+
+    observer.observe(loadMoreElement);
+
+    return () => observer.disconnect();
+  }, [images.length, progressivelyRender, renderedCount]);
+
+  return (
+    <>
+      <section className="columns-2 gap-3 sm:gap-4 md:columns-3 lg:columns-4">
+        {renderedImages.map((image, index) => (
+          <GalleryCard
+            key={image.driveFileId}
+            image={image}
+            index={index}
+            shouldAnimateImmediately={eagerImageIndices.has(index)}
+            shouldLoadEagerly={eagerImageIndices.has(index)}
+            shouldPrioritize={priorityImageIndices.has(index)}
+            onOpen={() => onOpen(index)}
+          />
+        ))}
+      </section>
+
+      {progressivelyRender && renderedCount < images.length ? (
+        <div
+          ref={loadMoreRef}
+          className="h-px"
+          aria-label={`全${images.length}枚中${renderedCount}枚を表示中`}
+        />
+      ) : null}
+    </>
+  );
+}
+
+export default function MasonryGallery({
+  images,
+  progressivelyRender,
+}: MasonryGalleryProps) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [showIntro, setShowIntro] = useState(true);
 
   const activeImage =
     activeIndex === null ? null : (images[activeIndex] ?? null);
-  const eagerImageIndices = useMemo(
-    () => getColumnCandidateIndices(images.length, 1, 5),
-    [images.length],
-  );
-  const priorityImageIndices = useMemo(
-    () => getColumnCandidateIndices(images.length, 1, 1),
-    [images.length],
-  );
 
   const showPreviousImage = () => {
     if (images.length === 0) {
@@ -323,19 +406,12 @@ export default function MasonryGallery({ images }: MasonryGalleryProps) {
       </AnimatePresence>
 
       {images.length > 0 ? (
-        <section className="columns-2 gap-3 sm:gap-4 md:columns-3 lg:columns-4">
-          {images.map((image, index) => (
-            <GalleryCard
-              key={image.driveFileId}
-              image={image}
-              index={index}
-              shouldAnimateImmediately={eagerImageIndices.has(index)}
-              shouldLoadEagerly={eagerImageIndices.has(index)}
-              shouldPrioritize={priorityImageIndices.has(index)}
-              onOpen={() => setActiveIndex(index)}
-            />
-          ))}
-        </section>
+        <MasonrySections
+          key={progressivelyRender ? "all" : "folder"}
+          images={images}
+          progressivelyRender={progressivelyRender}
+          onOpen={setActiveIndex}
+        />
       ) : (
         <div
           className="rounded-none border border-dashed border-[#cbd5d1] bg-white
