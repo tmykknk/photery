@@ -14,18 +14,21 @@ type Json = string | number | boolean | null | { [key: string]: Json } | Json[];
 interface DriveImageRow {
   drive_file_id: string;
   name: string | null;
-  thumbnail_url: string | null;
   tags?: string[] | null;
   created_at?: string | null;
   updated_at?: string | null;
   captured_at?: string | null;
 }
 
+interface DriveImageTableRow extends DriveImageRow {
+  thumbnail_url: string | null;
+}
+
 interface Database {
   public: {
     Tables: {
       drive_images: {
-        Row: DriveImageRow;
+        Row: DriveImageTableRow;
         Insert: {
           drive_file_id: string;
           name?: string | null;
@@ -64,7 +67,7 @@ async function fetchAllDriveImageRows(
     const to = from + galleryPageSize - 1;
     const { data, error } = await supabase
       .from("drive_images")
-      .select("*")
+      .select("drive_file_id, name, tags, created_at, updated_at, captured_at")
       .order("created_at", { ascending: true })
       .range(from, to);
 
@@ -90,6 +93,9 @@ function normalizeImage(row: DriveImageRow): GalleryImage {
     driveFileId: row.drive_file_id,
     name,
     imageUrl: `/api/images/${encodeURIComponent(row.drive_file_id)}`,
+    thumbnailUrl: `/api/images/${encodeURIComponent(
+      row.drive_file_id,
+    )}?variant=card`,
     tags: (row.tags ?? []).map((tag) => tag.trim()).filter(Boolean),
     capturedAt: row.captured_at ?? row.created_at ?? row.updated_at ?? null,
   };

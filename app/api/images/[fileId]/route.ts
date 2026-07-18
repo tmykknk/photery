@@ -6,6 +6,7 @@ import {
 import {
   bufferToArrayBuffer,
   convertHeicToWebp,
+  convertImageToCardWebp,
   isHeicImage,
 } from "@/app/lib/drive-images/heic";
 import { getSyncedDriveImage } from "@/app/lib/drive-images/store";
@@ -75,7 +76,7 @@ async function handleHeicImage(
   }
 }
 
-export async function GET(_request: Request, { params }: RouteContext) {
+export async function GET(request: Request, { params }: RouteContext) {
   try {
     const cookieStore = await cookies();
     const authToken = cookieStore.get(siteAuthCookieName)?.value;
@@ -101,6 +102,21 @@ export async function GET(_request: Request, { params }: RouteContext) {
     }
 
     const auth = createDriveAuth();
+    const isCardThumbnail =
+      new URL(request.url).searchParams.get("variant") === "card";
+
+    if (isCardThumbnail) {
+      const thumbnailResponse = await fetchDriveThumbnail(
+        syncedImage.thumbnail_url,
+        auth,
+        { preferredSize: 800, convertToWebp: true },
+      );
+
+      if (thumbnailResponse) {
+        return thumbnailResponse;
+      }
+    }
+
     const drive = createDriveClient(auth);
     const response = await drive.files.get(
       { fileId, alt: "media" },
@@ -115,6 +131,10 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
     const contentType =
       getHeaderValue(response.headers, "content-type") ?? "image/jpeg";
+
+    if (isCardThumbnail) {
+      return createWebpResponse(await convertImageToCardWebp(response.data));
+    }
 
     if (isHeicImage(contentType, syncedImage.name)) {
       return handleHeicImage(response.data, syncedImage.thumbnail_url, auth);

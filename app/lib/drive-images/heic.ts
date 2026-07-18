@@ -3,6 +3,7 @@ import "server-only";
 import { Readable } from "node:stream";
 
 const maxHeicInputBytes = 80 * 1024 * 1024;
+const cardThumbnailWidth = 800;
 
 export function isHeicImage(
   contentType: string,
@@ -60,6 +61,23 @@ export async function convertHeicToWebp(stream: Readable): Promise<Buffer> {
   // The byte cap above keeps conversion bounded before relaxing HEIF parser limits.
   return sharp(input, { autoOrient: true, unlimited: true })
     .webp({ quality: 86, effort: 4 })
+    .toBuffer();
+}
+
+export async function convertImageToCardWebp(
+  stream: Readable,
+): Promise<Buffer> {
+  const input = await readableToBuffer(stream, maxHeicInputBytes);
+  const { default: sharp } = await import("sharp");
+
+  return sharp(input, { autoOrient: true, unlimited: true })
+    .resize({
+      width: cardThumbnailWidth,
+      height: cardThumbnailWidth,
+      fit: "inside",
+      withoutEnlargement: true,
+    })
+    .webp({ quality: 82, effort: 3 })
     .toBuffer();
 }
 

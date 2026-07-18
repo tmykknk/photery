@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import Image from "next/image";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Lightbox from "./Lightbox";
 import type { GalleryImage } from "./gallery-types";
 import { getImageDateLabel } from "./gallery-utils";
@@ -14,17 +14,21 @@ interface MasonryGalleryProps {
 interface GalleryCardProps {
   image: GalleryImage;
   index: number;
+  shouldAnimateImmediately: boolean;
+  shouldLoadEagerly: boolean;
+  shouldPrioritize: boolean;
   onOpen: () => void;
 }
 
 const smoothEase = [0.22, 1, 0.36, 1] as const;
+const supportedColumnCounts = [2, 3, 4] as const;
 
 const cardVariants: Variants = {
   hidden: { opacity: 0 },
-  visible: (index: number) => ({
+  visible: (animationOrder: number) => ({
     opacity: 1,
     transition: {
-      delay: Math.min(index, 16) * 0.06,
+      delay: Math.min(animationOrder, 16) * 0.06,
       duration: 0.72,
       ease: smoothEase,
     },
@@ -34,6 +38,67 @@ const cardVariants: Variants = {
 function getStableAspectRatio(index: number): number {
   const ratios = [0.8, 0.72, 1.18, 1, 0.68, 1.32];
   return ratios[index % ratios.length] ?? 1;
+}
+
+function getEstimatedCardHeight(index: number): number {
+  return 1 / getStableAspectRatio(index) + 0.24;
+}
+
+function getLikelyColumnStartIndices(
+  itemCount: number,
+  columnCount: number,
+): number[] {
+  if (itemCount === 0) {
+    return [];
+  }
+
+  const estimatedHeights = Array.from({ length: itemCount }, (_, index) =>
+    getEstimatedCardHeight(index),
+  );
+  const totalHeight = estimatedHeights.reduce((sum, height) => sum + height, 0);
+  const startIndices = [0];
+  let cumulativeHeight = 0;
+  let nextColumn = 1;
+
+  for (
+    let index = 0;
+    index < itemCount && nextColumn < columnCount;
+    index += 1
+  ) {
+    cumulativeHeight += estimatedHeights[index] ?? 0;
+
+    if (cumulativeHeight >= (totalHeight * nextColumn) / columnCount) {
+      startIndices.push(Math.min(index + 1, itemCount - 1));
+      nextColumn += 1;
+    }
+  }
+
+  return startIndices;
+}
+
+function getColumnCandidateIndices(
+  itemCount: number,
+  beforeStart: number,
+  afterStart: number,
+): Set<number> {
+  const candidates = new Set<number>();
+
+  for (const columnCount of supportedColumnCounts) {
+    for (const startIndex of getLikelyColumnStartIndices(
+      itemCount,
+      columnCount,
+    )) {
+      for (let offset = -beforeStart; offset <= afterStart; offset += 1) {
+        const candidateIndex = startIndex + offset;
+
+        if (candidateIndex >= 0 && candidateIndex < itemCount) {
+          candidates.add(candidateIndex);
+        }
+      }
+    }
+  }
+
+  return candidates;
 }
 
 function IntroMark() {
@@ -112,11 +177,18 @@ function IntroMark() {
   );
 }
 
-function GalleryCard({ image, index, onOpen }: GalleryCardProps) {
+function GalleryCard({
+  image,
+  index,
+  shouldAnimateImmediately,
+  shouldLoadEagerly,
+  shouldPrioritize,
+  onOpen,
+}: GalleryCardProps) {
   return (
     <motion.button
       type="button"
-      custom={index}
+      custom={shouldAnimateImmediately ? 0 : index}
       variants={cardVariants}
       initial="hidden"
       whileInView="visible"
@@ -133,17 +205,17 @@ function GalleryCard({ image, index, onOpen }: GalleryCardProps) {
         className="relative w-full overflow-hidden bg-[#e9efec]"
         style={{ aspectRatio: getStableAspectRatio(index) }}
       >
-        {image.imageUrl ? (
+        {image.thumbnailUrl ? (
           <Image
-            src={image.imageUrl}
+            src={image.thumbnailUrl}
             alt={image.name}
             fill
             sizes="(max-width: 767px) 50vw, (max-width: 1024px) 33vw, 25vw"
             className="object-cover grayscale-0 transition duration-200 ease-out
               md:grayscale md:group-hover:scale-[1.025]
               md:group-hover:grayscale-0"
-            loading="eager"
-            fetchPriority={index < 8 ? "high" : "auto"}
+            loading={shouldLoadEagerly ? "eager" : "lazy"}
+            fetchPriority={shouldPrioritize ? "high" : "auto"}
             unoptimized
           />
         ) : (
@@ -184,6 +256,14 @@ export default function MasonryGallery({ images }: MasonryGalleryProps) {
 
   const activeImage =
     activeIndex === null ? null : (images[activeIndex] ?? null);
+  const eagerImageIndices = useMemo(
+    () => getColumnCandidateIndices(images.length, 1, 5),
+    [images.length],
+  );
+  const priorityImageIndices = useMemo(
+    () => getColumnCandidateIndices(images.length, 1, 1),
+    [images.length],
+  );
 
   const showPreviousImage = () => {
     if (images.length === 0) {
@@ -249,6 +329,9 @@ export default function MasonryGallery({ images }: MasonryGalleryProps) {
               key={image.driveFileId}
               image={image}
               index={index}
+              shouldAnimateImmediately={eagerImageIndices.has(index)}
+              shouldLoadEagerly={eagerImageIndices.has(index)}
+              shouldPrioritize={priorityImageIndices.has(index)}
               onOpen={() => setActiveIndex(index)}
             />
           ))}
