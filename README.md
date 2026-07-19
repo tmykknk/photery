@@ -177,7 +177,7 @@ photery/
 
 - `app/layout.tsx`: アプリ全体のHTML構造、メタデータ、フォント設定を定義します。
 - `app/globals.css`: Tailwind CSSの読み込み、グローバルカラー、フォント変数、基本背景を定義します。
-- `app/page.tsx`: Supabaseから画像メタデータを1,000件単位で全件取得し、`created_at` と `drive_file_id` で順序を安定させます。表示名の拡張子除去や画像プロキシURLの生成を行ってギャラリーへ渡します。
+- `app/page.tsx`: イントロを先にストリーミングし、`Suspense`内でSupabaseの画像メタデータ取得と管理者判定を並列実行します。画像は1,000件単位で全件取得し、`created_at` と `drive_file_id` で順序を安定させます。表示名の拡張子除去や画像プロキシURLの生成を行ってギャラリーへ渡します。
 - `app/login/page.tsx`: 閲覧用パスワード入力画面です。認証済みの場合はギャラリーへ戻します。
 - `app/favicon.ico`: ブラウザタブなどで使われるファビコンです。
 
@@ -192,7 +192,8 @@ photery/
 ### Components
 
 - `app/components/GalleryShell.tsx`: ヘッダー、フォルダ名タグによる表示切替、管理者用Syncボタンを担当します。
-- `app/components/MasonryGallery.tsx`: Masonryレイアウト、フォルダタグ付きカード表示、イントロアニメーション、カードクリック時のLightbox起動を担当します。「すべて」は単一のアシンメトリーなMasonryへ120枚ずつ自動追加し、初期DOMの肥大化を抑えます。フォルダ名タグ選択時は対象画像を同じMasonryへ全件表示します。カード比率はDriveファイルIDから安定して決定し、規則的な反復を避けます。列先頭候補だけを即時表示・高優先度にし、それ以外の画像はlazy読み込みします。
+- `app/components/IntroOverlay.tsx`: 2秒のイントロアニメーションと0.55秒の退出を担当します。ギャラリーデータ取得から独立して先に描画され、Supabase待ち時間とイントロ表示時間を重ねます。
+- `app/components/MasonryGallery.tsx`: Masonryレイアウト、フォルダタグ付きカード表示、カードクリック時のLightbox起動を担当します。「すべて」は単一のアシンメトリーなMasonryへ120枚ずつ自動追加し、初期DOMの肥大化を抑えます。フォルダ名タグ選択時は対象画像を同じMasonryへ全件表示します。カード比率はDriveファイルIDから安定して決定し、規則的な反復を避けます。列先頭候補だけを即時表示・高優先度にし、それ以外の画像はlazy読み込みします。
 - `app/components/Lightbox.tsx`: 全画面画像モーダルです。キーボード操作、左右ナビゲーション、モバイルスワイプに対応します。
 - `app/components/gallery-types.ts`: ギャラリーで使う共有TypeScript型を定義します。
 - `app/components/gallery-utils.ts`: JST基準の日付表示など、ギャラリー用の小さなユーティリティ関数を定義します。

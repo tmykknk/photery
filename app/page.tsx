@@ -4,7 +4,9 @@ import {
 } from "@/app/lib/auth-token";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
+import { Suspense } from "react";
 import GalleryShell from "./components/GalleryShell";
+import IntroOverlay from "./components/IntroOverlay";
 import type { GalleryImage } from "./components/gallery-types";
 
 export const dynamic = "force-dynamic";
@@ -98,40 +100,56 @@ function normalizeImage(row: DriveImageRow): GalleryImage {
   };
 }
 
-export default async function Home() {
+async function GalleryContent() {
   const supabase = createClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
+  const imagesPromise = fetchAllDriveImageRows(supabase);
+  const isAdminPromise = (async () => {
+    const cookieStore = await cookies();
+
+    return isValidSiteAdminToken(
+      cookieStore.get(siteAdminCookieName)?.value,
+      process.env.ADMIN_PASSWORD,
+    );
+  })();
 
   let images: DriveImageRow[];
+  let isAdmin: boolean;
 
   try {
-    images = await fetchAllDriveImageRows(supabase);
+    [images, isAdmin] = await Promise.all([imagesPromise, isAdminPromise]);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
     return (
-      <main className="min-h-screen bg-[#f7f8f4] p-6 text-[#161a18] md:p-10">
-        <div className="rounded-md border border-red-200 bg-red-50 p-6 text-red-700">
-          データの取得に失敗しました: {message}
-        </div>
-      </main>
+      <div className="rounded-md border border-red-200 bg-red-50 p-6 text-red-700">
+        データの取得に失敗しました: {message}
+      </div>
     );
   }
 
   const galleryImages = images.map(normalizeImage);
-  const cookieStore = await cookies();
-  const isAdmin = await isValidSiteAdminToken(
-    cookieStore.get(siteAdminCookieName)?.value,
-    process.env.ADMIN_PASSWORD,
-  );
 
+  return <GalleryShell images={galleryImages} isAdmin={isAdmin} />;
+}
+
+function GalleryLoading() {
+  return <div className="min-h-[70vh]" aria-label="ギャラリーを読み込み中" />;
+}
+
+export default function Home() {
   return (
-    <main
-      className="min-h-screen bg-[#f7f8f4] px-4 py-8 text-[#161a18] sm:px-6
-        md:px-10"
-    >
-      <GalleryShell images={galleryImages} isAdmin={isAdmin} />
-    </main>
+    <>
+      <IntroOverlay />
+      <main
+        className="min-h-screen bg-[#f7f8f4] px-4 py-8 text-[#161a18] sm:px-6
+          md:px-10"
+      >
+        <Suspense fallback={<GalleryLoading />}>
+          <GalleryContent />
+        </Suspense>
+      </main>
+    </>
   );
 }
