@@ -215,9 +215,9 @@ export default function Lightbox({
               transition={{ duration: 0.28, ease: smoothEase }}
               onClick={(event) => event.stopPropagation()}
             >
-              {image.imageUrl ? (
+              {image.thumbnailUrl ? (
                 <Image
-                  src={image.imageUrl}
+                  src={image.thumbnailUrl}
                   alt={image.name}
                   fill
                   sizes="100vw"

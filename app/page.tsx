@@ -91,7 +91,6 @@ function normalizeImage(row: DriveImageRow): GalleryImage {
   return {
     driveFileId: row.drive_file_id,
     name,
-    imageUrl: `/api/images/${encodeURIComponent(row.drive_file_id)}`,
     thumbnailUrl: `/api/images/${encodeURIComponent(
       row.drive_file_id,
     )}?variant=card`,

@@ -186,7 +186,7 @@ photery/
 - `app/api/auth/route.ts`: `VIEW_PASSWORD` / `ADMIN_PASSWORD` と入力値を照合し、成功時に生パスワードではなく派生トークンをCookieへ発行します。通常ログインでは `site_auth`、管理者ログインでは `site_auth` と `site_admin` を発行します。
 - `app/api/sync/route.ts`: Google Drive APIで指定フォルダ内の画像とフォルダ名を取得し、フォルダ名をタグとして `drive_images` テーブルへupsertします。通常の `site_auth` Cookieに加えて、`ADMIN_PASSWORD` ログイン時だけ発行される `site_admin` Cookieを検証するため、閲覧者だけでは同期や削除を実行できません。`GOOGLE_DRIVE_FOLDER_ID` は1つ、またはカンマ区切りの複数フォルダIDを指定できます。同期後は現在指定されていないフォルダ由来の古い行を削除し、ギャラリー内容を設定値に合わせます。
 - `app/api/cron/keep-alive/route.ts`: Supabaseの無料プラン自動停止を防ぐためのKeep-alive用APIです。Vercel Cronから定期的に実行され、環境変数 `CRON_SECRET` に基づく認証が行われます。
-- `app/api/images/[fileId]/route.ts`: Google Driveの非公開画像をサービスアカウント認証で取得し、クライアントへ安全にストリーミングします。`?variant=card` では最大800pxのDriveサムネイルを変換せずにストリーミングし、Vercel上でカードごとにSharpを実行する負荷を避けます。Lightboxでは原寸画像を使い、HEIC/HEIFだけWebP変換またはGoogle Driveの高解像度サムネイル候補へフォールバックします。
+- `app/api/images/[fileId]/route.ts`: Google Driveの非公開画像をサービスアカウント認証で取得し、クライアントへ安全にストリーミングします。`?variant=card` では最大800pxのDriveサムネイルを変換せずにストリーミングし、Vercel上でカードごとにSharpを実行する負荷を避けます。クエリなしでは原寸画像を取得でき、HEIC/HEIFはWebP変換またはGoogle Driveの高解像度サムネイル候補へフォールバックします。
 - `app/api/images/health/route.ts`: 認証済みユーザー向けの診断APIです。Supabase接続とGoogle Driveサービスアカウント認証を確認します。
 
 ### Components
@@ -194,7 +194,7 @@ photery/
 - `app/components/GalleryShell.tsx`: ヘッダー、フォルダ名タグによる表示切替、管理者用Syncボタンを担当します。
 - `app/components/IntroOverlay.tsx`: 2秒のイントロアニメーションと0.55秒の退出を担当します。ギャラリーデータ取得から独立して先に描画され、Supabase待ち時間とイントロ表示時間を重ねます。
 - `app/components/MasonryGallery.tsx`: Masonryレイアウト、フォルダタグ付きカード表示、カードクリック時のLightbox起動を担当します。「すべて」は単一のアシンメトリーなMasonryへ120枚ずつ自動追加し、初期DOMの肥大化を抑えます。フォルダ名タグ選択時は対象画像を同じMasonryへ全件表示します。カード比率はDriveファイルIDから安定して決定し、規則的な反復を避けます。列先頭候補だけを即時表示・高優先度にし、それ以外の画像はlazy読み込みします。
-- `app/components/Lightbox.tsx`: 全画面画像モーダルです。キーボード操作、左右ナビゲーション、モバイルスワイプに対応します。
+- `app/components/Lightbox.tsx`: 全画面画像モーダルです。カードと同じ最大800pxのサムネイルを`object-contain`で表示してブラウザキャッシュを再利用し、キーボード操作、左右ナビゲーション、モバイルスワイプに対応します。
 - `app/components/gallery-types.ts`: ギャラリーで使う共有TypeScript型を定義します。
 - `app/components/gallery-utils.ts`: JST基準の日付表示など、ギャラリー用の小さなユーティリティ関数を定義します。
 
