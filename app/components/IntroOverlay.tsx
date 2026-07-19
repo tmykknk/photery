@@ -1,9 +1,26 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { useState } from "react";
+import { useLayoutEffect, useState } from "react";
 
 const smoothEase = [0.22, 1, 0.36, 1] as const;
+
+function measureScrollbarWidth(): number {
+  const measuringElement = document.createElement("div");
+  measuringElement.style.position = "absolute";
+  measuringElement.style.top = "-9999px";
+  measuringElement.style.width = "100px";
+  measuringElement.style.height = "100px";
+  measuringElement.style.overflow = "scroll";
+  measuringElement.style.scrollbarGutter = "stable";
+  document.body.append(measuringElement);
+
+  const scrollbarWidth =
+    measuringElement.offsetWidth - measuringElement.clientWidth;
+  measuringElement.remove();
+
+  return scrollbarWidth;
+}
 
 function IntroMark() {
   return (
@@ -83,13 +100,32 @@ function IntroMark() {
 
 export default function IntroOverlay() {
   const [showIntro, setShowIntro] = useState(true);
+  const [isScrollLocked, setIsScrollLocked] = useState(true);
+
+  useLayoutEffect(() => {
+    if (!isScrollLocked) {
+      return;
+    }
+
+    const previousBodyPaddingRight = document.body.style.paddingRight;
+    const bodyPaddingRight =
+      Number.parseFloat(getComputedStyle(document.body).paddingRight) || 0;
+    const scrollbarWidth = measureScrollbarWidth();
+
+    document.body.style.paddingRight = `${bodyPaddingRight + scrollbarWidth}px`;
+
+    return () => {
+      document.body.style.paddingRight = previousBodyPaddingRight;
+    };
+  }, [isScrollLocked]);
 
   return (
-    <AnimatePresence>
+    <AnimatePresence onExitComplete={() => setIsScrollLocked(false)}>
       {showIntro ? (
         <motion.div
-          className="fixed inset-0 z-60 grid place-items-center bg-[#111816]
-            text-[#f7f8f4]"
+          data-intro-overlay
+          className="fixed inset-y-0 left-0 z-60 grid w-screen
+            place-items-center bg-[#111816] text-[#f7f8f4]"
           initial={{ opacity: 1 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0, transition: { duration: 0.55 } }}
