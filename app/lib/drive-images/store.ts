@@ -97,6 +97,7 @@ export async function upsertDriveImages(
       name: file.name,
       thumbnail_url: file.thumbnailLink,
       tags: file.tags,
+      folder_order: file.folderOrder,
     })),
     { onConflict: "drive_file_id" },
   );

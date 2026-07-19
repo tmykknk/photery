@@ -10,21 +10,43 @@ interface GalleryShellProps {
   isAdmin: boolean;
 }
 
+const fileNameCollator = new Intl.Collator("ja", {
+  numeric: true,
+  sensitivity: "base",
+});
+
+function compareByFileName(a: GalleryImage, b: GalleryImage): number {
+  const nameComparison = fileNameCollator.compare(a.name, b.name);
+
+  return nameComparison || a.driveFileId.localeCompare(b.driveFileId);
+}
+
+function compareAllImages(a: GalleryImage, b: GalleryImage): number {
+  return a.folderOrder - b.folderOrder || compareByFileName(a, b);
+}
+
 export default function GalleryShell({ images, isAdmin }: GalleryShellProps) {
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const tags = useMemo(
-    () => [...new Set(images.flatMap((image) => image.tags))],
+    () => [
+      ...new Set(
+        [...images].sort(compareAllImages).flatMap((image) => image.tags),
+      ),
+    ],
     [images],
   );
   const activeTag =
     selectedTag !== null && tags.includes(selectedTag) ? selectedTag : null;
-  const filteredImages = useMemo(
-    () =>
+  const sortedImages = useMemo(() => {
+    const matchingImages =
       activeTag === null
         ? images
-        : images.filter((image) => image.tags.includes(activeTag)),
-    [activeTag, images],
-  );
+        : images.filter((image) => image.tags.includes(activeTag));
+
+    return [...matchingImages].sort(
+      activeTag === null ? compareAllImages : compareByFileName,
+    );
+  }, [activeTag, images]);
 
   return (
     <div className="mx-auto grid max-w-7xl gap-10">
@@ -82,7 +104,7 @@ export default function GalleryShell({ images, isAdmin }: GalleryShellProps) {
 
       {images.length > 0 ? (
         <MasonryGallery
-          images={filteredImages}
+          images={sortedImages}
           progressivelyRender={activeTag === null}
         />
       ) : (

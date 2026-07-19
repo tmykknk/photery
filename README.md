@@ -42,6 +42,7 @@ create table if not exists public.drive_images (
   name text,
   thumbnail_url text,
   tags text[] not null default '{}'::text[],
+  folder_order integer not null default 2147483647,
   created_at timestamptz default now()
 );
 
@@ -49,17 +50,21 @@ create table if not exists public.drive_images (
 alter table public.drive_images
 add column if not exists tags text[] not null default '{}'::text[];
 
--- 3. 全件取得の順序を安定させ、画像数増加時の取得を支える複合インデックス
-create index if not exists drive_images_created_at_id_idx
-on public.drive_images (created_at asc, drive_file_id asc);
+-- 3. 既存テーブルにも環境変数のフォルダID順を保存するカラムを追加
+alter table public.drive_images
+add column if not exists folder_order integer not null default 2147483647;
 
--- 4. 統計情報を更新して、クエリプランへインデックスを反映
+-- 4. 「すべて」のフォルダ順・ファイル名順を支える複合インデックス
+create index if not exists drive_images_folder_order_name_id_idx
+on public.drive_images (folder_order asc, name asc, drive_file_id asc);
+
+-- 5. 統計情報を更新して、クエリプランへインデックスを反映
 analyze public.drive_images;
 
--- 5. 行レベルセキュリティ（RLS）を有効化して警告を解決
+-- 6. 行レベルセキュリティ（RLS）を有効化して警告を解決
 alter table public.drive_images enable row level security;
 
--- 6. Next.jsのサーバー（service_role）からの全操作を許可するポリシー
+-- 7. Next.jsのサーバー（service_role）からの全操作を許可するポリシー
 create policy "Allow all operations for service role"
 on public.drive_images
 for all
@@ -74,7 +79,7 @@ with check (true);
 
 1. `.env.local.sample` を参考に、プロジェクトルートへ `.env.local` を作成
 2. Google Drive、Supabase、閲覧用パスワード（`VIEW_PASSWORD`）、管理者用パスワード（`ADMIN_PASSWORD`）、Cookie署名用の `SITE_AUTH_SECRET` を `.env.local` に記述
-3. 1つのフォルダだけ表示する場合は `GOOGLE_DRIVE_FOLDER_ID="folder_id"`、複数フォルダをまとめて表示する場合は `GOOGLE_DRIVE_FOLDER_ID="old_folder_id,new_folder_id"` のようにIDだけをカンマ区切りで指定。各フォルダ名は同期時にGoogle Driveから取得され、ギャラリーのタグとして使われます
+3. 1つのフォルダだけ表示する場合は `GOOGLE_DRIVE_FOLDER_ID="folder_id"`、複数フォルダをまとめて表示する場合は `GOOGLE_DRIVE_FOLDER_ID="old_folder_id,new_folder_id"` のようにIDだけをカンマ区切りで指定。左からのフォルダID順が「すべて」の表示順になります。各フォルダ名は同期時にGoogle Driveから取得され、ギャラリーのタグとして使われます
 
 ## 4. 動作確認
 
@@ -82,7 +87,7 @@ with check (true);
 2. `http://localhost:3000/` にアクセスし、ログイン画面へリダイレクトされるか確認
 3. 設定したパスワードを入力してログイン
 4. 管理者用パスワード（`ADMIN_PASSWORD`）でログインすると表示される `Sync` ボタンを押し、データ同期を実行（成功メッセージが出ればOK）
-5. 画像一覧と、ヘッダーの「すべて」およびフォルダ名タグが表示されるか確認。「すべて」は最初の120枚を表示し、下端へ近づくと120枚ずつ自動で追加します。フォルダ名タグを選択した場合は、そのフォルダの画像を全件表示します。`GOOGLE_DRIVE_FOLDER_ID` を1つに戻して再同期すると、そのフォルダ以外の古い同期済み画像はギャラリーから削除されます
+5. 画像一覧と、ヘッダーの「すべて」およびフォルダ名タグが表示されるか確認。「すべて」は`GOOGLE_DRIVE_FOLDER_ID`のフォルダ順を優先し、各フォルダ内をファイル名昇順で最初の120枚から表示して、下端へ近づくと120枚ずつ自動で追加します。フォルダ名タグを選択した場合は、そのフォルダの画像をファイル名昇順で全件表示します。`GOOGLE_DRIVE_FOLDER_ID`を1つに戻して再同期すると、そのフォルダ以外の古い同期済み画像はギャラリーから削除されます
 
 ## 5. Vercelにデプロイ
 
@@ -177,23 +182,23 @@ photery/
 
 - `app/layout.tsx`: アプリ全体のHTML構造、メタデータ、フォント設定を定義します。
 - `app/globals.css`: Tailwind CSSの読み込み、グローバルカラー、フォント変数、基本背景を定義します。
-- `app/page.tsx`: イントロを先にストリーミングし、`Suspense`内でSupabaseの画像メタデータ取得と管理者判定を並列実行します。画像は1,000件単位で全件取得し、`created_at` と `drive_file_id` で順序を安定させます。表示名の拡張子除去や画像プロキシURLの生成を行ってギャラリーへ渡します。
+- `app/page.tsx`: イントロを先にストリーミングし、`Suspense`内でSupabaseの画像メタデータ取得と管理者判定を並列実行します。画像は1,000件単位で全件取得し、`folder_order`、ファイル名、DriveファイルIDで順序を安定させます。表示名の拡張子除去や画像プロキシURLの生成を行ってギャラリーへ渡します。
 - `app/login/page.tsx`: 閲覧用パスワード入力画面です。認証済みの場合はギャラリーへ戻します。
 - `app/favicon.ico`: ブラウザタブなどで使われるファビコンです。
 
 ### API Routes
 
 - `app/api/auth/route.ts`: `VIEW_PASSWORD` / `ADMIN_PASSWORD` と入力値を照合し、成功時に生パスワードではなく派生トークンをCookieへ発行します。通常ログインでは `site_auth`、管理者ログインでは `site_auth` と `site_admin` を発行します。
-- `app/api/sync/route.ts`: Google Drive APIで指定フォルダ内の画像とフォルダ名を取得し、フォルダ名をタグとして `drive_images` テーブルへupsertします。通常の `site_auth` Cookieに加えて、`ADMIN_PASSWORD` ログイン時だけ発行される `site_admin` Cookieを検証するため、閲覧者だけでは同期や削除を実行できません。`GOOGLE_DRIVE_FOLDER_ID` は1つ、またはカンマ区切りの複数フォルダIDを指定できます。同期後は現在指定されていないフォルダ由来の古い行を削除し、ギャラリー内容を設定値に合わせます。
+- `app/api/sync/route.ts`: Google Drive APIで指定フォルダ内の画像とフォルダ名を取得し、フォルダ名タグと`GOOGLE_DRIVE_FOLDER_ID`の配列順を `drive_images` テーブルへupsertします。通常の `site_auth` Cookieに加えて、`ADMIN_PASSWORD` ログイン時だけ発行される `site_admin` Cookieを検証するため、閲覧者だけでは同期や削除を実行できません。`GOOGLE_DRIVE_FOLDER_ID` は1つ、またはカンマ区切りの複数フォルダIDを指定できます。同期後は現在指定されていないフォルダ由来の古い行を削除し、ギャラリー内容を設定値に合わせます。
 - `app/api/cron/keep-alive/route.ts`: Supabaseの無料プラン自動停止を防ぐためのKeep-alive用APIです。Vercel Cronから定期的に実行され、環境変数 `CRON_SECRET` に基づく認証が行われます。
 - `app/api/images/[fileId]/route.ts`: Google Driveの非公開画像をサービスアカウント認証で取得し、クライアントへ安全にストリーミングします。`?variant=card` では最大800pxのDriveサムネイルを変換せずにストリーミングし、Vercel上でカードごとにSharpを実行する負荷を避けます。クエリなしでは原寸画像を取得でき、HEIC/HEIFはWebP変換またはGoogle Driveの高解像度サムネイル候補へフォールバックします。
 - `app/api/images/health/route.ts`: 認証済みユーザー向けの診断APIです。Supabase接続とGoogle Driveサービスアカウント認証を確認します。
 
 ### Components
 
-- `app/components/GalleryShell.tsx`: ヘッダー、フォルダ名タグによる表示切替、管理者用Syncボタンを担当します。
+- `app/components/GalleryShell.tsx`: ヘッダー、フォルダ名タグによる表示切替、管理者用Syncボタンを担当します。「すべて」はフォルダ順とファイル名昇順、タグ選択時はファイル名昇順へ並べます。
 - `app/components/IntroOverlay.tsx`: 2秒のイントロアニメーションと0.55秒の退出を担当します。ギャラリーデータ取得から独立して先に描画され、Supabase待ち時間とイントロ表示時間を重ねます。
-- `app/components/MasonryGallery.tsx`: Masonryレイアウト、フォルダタグ付きカード表示、カードクリック時のLightbox起動を担当します。「すべて」は単一のアシンメトリーなMasonryへ120枚ずつ自動追加し、初期DOMの肥大化を抑えます。フォルダ名タグ選択時は対象画像を同じMasonryへ全件表示します。カード比率はDriveファイルIDから安定して決定し、規則的な反復を避けます。列先頭候補だけを即時表示・高優先度にし、それ以外の画像はlazy読み込みします。
+- `app/components/MasonryGallery.tsx`: Masonryレイアウト、フォルダタグ付きカード表示、カードクリック時のLightbox起動を担当します。画像は左から右へ順にカラムへ割り当て、各カラム内ではその続きのファイル名順を保ちます。「すべて」は120枚ずつ自動追加し、初期DOMの肥大化を抑えます。フォルダ名タグ選択時は対象画像を全件表示します。カード比率はDriveファイルIDから安定して決定し、規則的な反復を避けます。最初の画面内候補だけを即時表示・高優先度にし、それ以外の画像はlazy読み込みします。
 - `app/components/Lightbox.tsx`: 全画面画像モーダルです。カードと同じ最大800pxのサムネイルを`object-contain`で表示してブラウザキャッシュを再利用し、キーボード操作、左右ナビゲーション、モバイルスワイプに対応します。
 - `app/components/gallery-types.ts`: ギャラリーで使う共有TypeScript型を定義します。
 - `app/components/gallery-utils.ts`: JST基準の日付表示など、ギャラリー用の小さなユーティリティ関数を定義します。
@@ -207,7 +212,7 @@ photery/
 
 - `app/lib/auth-token.ts`: `VIEW_PASSWORD` / `ADMIN_PASSWORD` と `SITE_AUTH_SECRET` からHMAC-SHA256の派生トークンを生成・検証する共通ヘルパーです。Cookieには生パスワードではなく、この派生トークンを保存します。`SITE_AUTH_SECRET` が未設定の場合もログイン不能にならないよう各パスワードをフォールバックに使いますが、本番環境では `SITE_AUTH_SECRET` の設定を推奨します。
 - `app/lib/drive-images/google-drive.ts`: Google DriveのJWT認証、Driveクライアント生成、フォルダID解析、画像一覧取得を担当します。
-- `app/lib/drive-images/store.ts`: Supabaseの `drive_images` 読み書き、upsert、現在の同期対象から外れた画像の削除を担当します。
+- `app/lib/drive-images/store.ts`: Supabaseの `drive_images` 読み書き、フォルダ順を含むupsert、現在の同期対象から外れた画像の削除を担当します。
 - `app/lib/drive-images/heic.ts`: HEIC/HEIF判定、サイズ上限付きバッファリング、WebP変換を担当します。`sharp` はHEIC/HEIF変換時だけ遅延読み込みします。
 - `app/lib/drive-images/thumbnail.ts`: HEIC変換失敗時にGoogle Driveの高解像度サムネイル候補を認証付きで取得します。
 

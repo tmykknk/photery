@@ -7,6 +7,7 @@ export interface DriveImageFile {
   name: string | null;
   thumbnailLink: string | null;
   tags: string[];
+  folderOrder: number;
 }
 
 interface DriveImageMetadata {
@@ -61,7 +62,7 @@ export async function listDriveImagesInFolders(
   const drive = createDriveClient(auth);
   const filesById = new Map<string, DriveImageFile>();
 
-  for (const folderId of folderIds) {
+  for (const [folderOrder, folderId] of folderIds.entries()) {
     const folderResponse = await drive.files.get({
       fileId: folderId,
       fields: "id, name",
@@ -91,8 +92,16 @@ export async function listDriveImagesInFolders(
             if (!existingFile.tags.includes(folderName)) {
               existingFile.tags.push(folderName);
             }
+            existingFile.folderOrder = Math.min(
+              existingFile.folderOrder,
+              folderOrder,
+            );
           } else {
-            filesById.set(file.id, { ...file, tags: [folderName] });
+            filesById.set(file.id, {
+              ...file,
+              tags: [folderName],
+              folderOrder,
+            });
           }
         }
       }

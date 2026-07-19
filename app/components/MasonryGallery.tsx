@@ -28,7 +28,6 @@ interface GalleryCardProps {
 }
 
 const smoothEase = [0.22, 1, 0.36, 1] as const;
-const supportedColumnCounts = [2, 3, 4] as const;
 const progressiveBatchSize = 120;
 
 const cardVariants: Variants = {
@@ -55,63 +54,56 @@ function getStableAspectRatio(image: GalleryImage): number {
   return ratios[(hash >>> 0) % ratios.length] ?? 1;
 }
 
-function getEstimatedCardHeight(image: GalleryImage): number {
-  return 1 / getStableAspectRatio(image) + 0.24;
+function getColumnCount(viewportWidth: number): number {
+  if (viewportWidth >= 1024) {
+    return 4;
+  }
+
+  if (viewportWidth >= 768) {
+    return 3;
+  }
+
+  return 2;
 }
 
-function getLikelyColumnStartIndices(
+function useResponsiveColumnCount(): number {
+  const [columnCount, setColumnCount] = useState(2);
+
+  useEffect(() => {
+    const updateColumnCount = () =>
+      setColumnCount(getColumnCount(window.innerWidth));
+
+    updateColumnCount();
+    window.addEventListener("resize", updateColumnCount);
+
+    return () => window.removeEventListener("resize", updateColumnCount);
+  }, []);
+
+  return columnCount;
+}
+
+function distributeImagesAcrossColumns(
   images: GalleryImage[],
   columnCount: number,
-): number[] {
-  const itemCount = images.length;
+): Array<Array<{ image: GalleryImage; index: number }>> {
+  const columns = Array.from(
+    { length: columnCount },
+    () =>
+      [] as Array<{
+        image: GalleryImage;
+        index: number;
+      }>,
+  );
 
-  if (itemCount === 0) {
-    return [];
-  }
+  images.forEach((image, index) => {
+    const column = columns[index % columnCount];
 
-  const estimatedHeights = images.map(getEstimatedCardHeight);
-  const totalHeight = estimatedHeights.reduce((sum, height) => sum + height, 0);
-  const startIndices = [0];
-  let cumulativeHeight = 0;
-  let nextColumn = 1;
-
-  for (
-    let index = 0;
-    index < itemCount && nextColumn < columnCount;
-    index += 1
-  ) {
-    cumulativeHeight += estimatedHeights[index] ?? 0;
-
-    if (cumulativeHeight >= (totalHeight * nextColumn) / columnCount) {
-      startIndices.push(Math.min(index + 1, itemCount - 1));
-      nextColumn += 1;
+    if (column) {
+      column.push({ image, index });
     }
-  }
+  });
 
-  return startIndices;
-}
-
-function getColumnCandidateIndices(
-  images: GalleryImage[],
-  beforeStart: number,
-  afterStart: number,
-): Set<number> {
-  const itemCount = images.length;
-  const candidates = new Set<number>();
-
-  for (const columnCount of supportedColumnCounts) {
-    for (const startIndex of getLikelyColumnStartIndices(images, columnCount)) {
-      for (let offset = -beforeStart; offset <= afterStart; offset += 1) {
-        const candidateIndex = startIndex + offset;
-
-        if (candidateIndex >= 0 && candidateIndex < itemCount) {
-          candidates.add(candidateIndex);
-        }
-      }
-    }
-  }
-
-  return candidates;
+  return columns;
 }
 
 function GalleryCard({
@@ -132,8 +124,8 @@ function GalleryCard({
       viewport={{ once: true, margin: "0px 0px -8% 0px", amount: 0.12 }}
       whileHover={{ y: -2, transition: { duration: 0.12 } }}
       onClick={onOpen}
-      className="group mb-4 block w-full cursor-pointer break-inside-avoid
-        overflow-hidden rounded-none border border-[#d7dedb] bg-white text-left
+      className="group block w-full cursor-pointer overflow-hidden rounded-none
+        border border-[#d7dedb] bg-white text-left
         shadow-[0_12px_34px_rgba(17,24,22,0.055)] transition-shadow duration-150
         outline-none hover:shadow-[0_18px_44px_rgba(17,24,22,0.105)]
         focus-visible:ring-2 focus-visible:ring-[#2f5d7c]/25"
@@ -202,8 +194,14 @@ function MasonrySections({
     ? Math.min(visibleCount, images.length)
     : images.length;
   const renderedImages = images.slice(0, renderedCount);
-  const eagerImageIndices = getColumnCandidateIndices(renderedImages, 1, 5);
-  const priorityImageIndices = getColumnCandidateIndices(renderedImages, 1, 1);
+  const columnCount = useResponsiveColumnCount();
+  const columns = distributeImagesAcrossColumns(renderedImages, columnCount);
+  const eagerImageIndices = new Set(
+    renderedImages.slice(0, columnCount * 5).map((_, index) => index),
+  );
+  const priorityImageIndices = new Set(
+    renderedImages.slice(0, columnCount * 2).map((_, index) => index),
+  );
 
   useEffect(() => {
     if (!progressivelyRender || renderedCount >= images.length) {
@@ -234,17 +232,27 @@ function MasonrySections({
 
   return (
     <>
-      <section className="columns-2 gap-3 sm:gap-4 md:columns-3 lg:columns-4">
-        {renderedImages.map((image, index) => (
-          <GalleryCard
-            key={image.driveFileId}
-            image={image}
-            index={index}
-            shouldAnimateImmediately={eagerImageIndices.has(index)}
-            shouldLoadEagerly={eagerImageIndices.has(index)}
-            shouldPrioritize={priorityImageIndices.has(index)}
-            onOpen={() => onOpen(index)}
-          />
+      <section
+        aria-label="写真一覧"
+        className="grid items-start gap-3 sm:gap-4"
+        style={{
+          gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
+        }}
+      >
+        {columns.map((column, columnIndex) => (
+          <div key={columnIndex} className="grid content-start gap-3 sm:gap-4">
+            {column.map(({ image, index }) => (
+              <GalleryCard
+                key={image.driveFileId}
+                image={image}
+                index={index}
+                shouldAnimateImmediately={eagerImageIndices.has(index)}
+                shouldLoadEagerly={eagerImageIndices.has(index)}
+                shouldPrioritize={priorityImageIndices.has(index)}
+                onOpen={() => onOpen(index)}
+              />
+            ))}
+          </div>
         ))}
       </section>
 

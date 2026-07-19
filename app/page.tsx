@@ -17,6 +17,7 @@ interface DriveImageRow {
   drive_file_id: string;
   name: string | null;
   tags?: string[] | null;
+  folder_order?: number | null;
   created_at?: string | null;
 }
 
@@ -34,6 +35,7 @@ interface Database {
           name?: string | null;
           thumbnail_url?: string | null;
           tags?: string[] | null;
+          folder_order?: number | null;
           created_at?: string | null;
         };
         Update: Partial<DriveImageRow>;
@@ -65,8 +67,9 @@ async function fetchAllDriveImageRows(
     const to = from + galleryPageSize - 1;
     const { data, error } = await supabase
       .from("drive_images")
-      .select("drive_file_id, name, tags, created_at")
-      .order("created_at", { ascending: true })
+      .select("drive_file_id, name, tags, folder_order, created_at")
+      .order("folder_order", { ascending: true, nullsFirst: false })
+      .order("name", { ascending: true, nullsFirst: false })
       .order("drive_file_id", { ascending: true })
       .range(from, to);
 
@@ -95,6 +98,7 @@ function normalizeImage(row: DriveImageRow): GalleryImage {
       row.drive_file_id,
     )}?variant=card`,
     tags: (row.tags ?? []).map((tag) => tag.trim()).filter(Boolean),
+    folderOrder: row.folder_order ?? Number.MAX_SAFE_INTEGER,
     capturedAt: row.created_at ?? null,
   };
 }

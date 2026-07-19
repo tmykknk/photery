@@ -3,5 +3,6 @@ export interface GalleryImage {
   name: string;
   thumbnailUrl: string;
   tags: string[];
+  folderOrder: number;
   capturedAt: string | null;
 }
