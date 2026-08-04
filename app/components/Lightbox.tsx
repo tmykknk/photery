@@ -1,10 +1,9 @@
 "use client";
-
-import { AnimatePresence, motion, type PanInfo } from "framer-motion";
-import Image from "next/image";
+import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import type { GalleryImage } from "./gallery-types";
+import ZoomableImage from "./ZoomableImage";
 
 interface LightboxProps {
   image: GalleryImage | null;
@@ -17,7 +16,7 @@ interface LightboxProps {
 
 interface IconButtonProps {
   label: string;
-  className: string;
+  className?: string;
   onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
   children: React.ReactNode;
 }
@@ -28,11 +27,12 @@ interface ArrowButtonProps {
   children: React.ReactNode;
 }
 
-const smoothEase = [0.22, 1, 0.36, 1] as const;
-const swipeOffsetThreshold = 80;
-const swipeVelocityThreshold = 420;
-
-function IconButton({ label, className, onClick, children }: IconButtonProps) {
+function IconButton({
+  label,
+  className = "",
+  onClick,
+  children,
+}: IconButtonProps) {
   return (
     <button
       type="button"
@@ -124,20 +124,12 @@ export default function Lightbox({
   }, []);
 
   useEffect(() => {
-    if (!image) {
-      return;
-    }
+    if (!image) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-      if (event.key === "ArrowLeft") {
-        onPrevious();
-      }
-      if (event.key === "ArrowRight") {
-        onNext();
-      }
+      if (event.key === "Escape") onClose();
+      if (event.key === "ArrowLeft") onPrevious();
+      if (event.key === "ArrowRight") onNext();
     };
 
     document.addEventListener("keydown", handleKeyDown);
@@ -149,28 +141,7 @@ export default function Lightbox({
     };
   }, [image, onClose, onNext, onPrevious]);
 
-  const handleDragEnd = (
-    _event: MouseEvent | TouchEvent | PointerEvent,
-    info: PanInfo,
-  ) => {
-    const hasSwipeDistance = Math.abs(info.offset.x) > swipeOffsetThreshold;
-    const hasSwipeVelocity = Math.abs(info.velocity.x) > swipeVelocityThreshold;
-
-    if (!hasSwipeDistance && !hasSwipeVelocity) {
-      return;
-    }
-
-    if (info.offset.x > 0) {
-      onPrevious();
-    } else {
-      onNext();
-    }
-  };
-
-  if (!portalRoot) {
-    return null;
-  }
-
+  if (!portalRoot) return null;
   return createPortal(
     <AnimatePresence>
       {image ? (
@@ -201,39 +172,12 @@ export default function Lightbox({
             className="grid h-full grid-rows-[1fr_auto] gap-4 px-4 py-16
               md:px-20"
           >
-            <motion.div
+            <ZoomableImage
               key={image.driveFileId}
-              className="relative min-h-0 cursor-grab overflow-hidden rounded-md
-                active:cursor-grabbing"
-              drag="x"
-              dragConstraints={{ left: 0, right: 0 }}
-              dragElastic={0.16}
-              onDragEnd={handleDragEnd}
-              initial={{ opacity: 0, scale: 0.96, y: 18 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.98 }}
-              transition={{ duration: 0.28, ease: smoothEase }}
-              onClick={(event) => event.stopPropagation()}
-            >
-              {image.thumbnailUrl ? (
-                <Image
-                  src={image.thumbnailUrl}
-                  alt={image.name}
-                  fill
-                  sizes="100vw"
-                  className="object-contain"
-                  priority
-                  unoptimized
-                />
-              ) : (
-                <div
-                  className="flex h-full items-center justify-center
-                    text-zinc-300"
-                >
-                  No Image
-                </div>
-              )}
-            </motion.div>
+              image={image}
+              onPrevious={onPrevious}
+              onNext={onNext}
+            />
             <div
               className="mx-auto grid w-full max-w-3xl gap-2 text-center"
               onClick={(event) => event.stopPropagation()}
