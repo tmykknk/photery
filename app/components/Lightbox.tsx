@@ -1,8 +1,20 @@
 "use client";
+
 import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import {
+  ArrowButton,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  CloseIcon,
+  DownloadIcon,
+  FullscreenIcon,
+  IconButton,
+} from "./LightboxControls";
 import type { GalleryImage } from "./gallery-types";
+import { useFullscreen } from "./useFullscreen";
+import { useImageDownload } from "./useImageDownload";
 import ZoomableImage from "./ZoomableImage";
 
 interface LightboxProps {
@@ -14,111 +26,6 @@ interface LightboxProps {
   onNext: () => void;
 }
 
-interface IconButtonProps {
-  label: string;
-  className?: string;
-  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
-  children: React.ReactNode;
-}
-
-interface ArrowButtonProps {
-  label: string;
-  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
-  children: React.ReactNode;
-}
-
-function IconButton({
-  label,
-  className = "",
-  onClick,
-  children,
-}: IconButtonProps) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      onClick={onClick}
-      className={`grid h-11 w-11 place-items-center rounded-full border
-        border-white/20 bg-white/10 text-white shadow-lg backdrop-blur-md
-        transition hover:bg-white/20 focus-visible:outline-2
-        focus-visible:outline-white/70 ${className}`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function ArrowButton({ label, onClick, children }: ArrowButtonProps) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      onClick={onClick}
-      className="grid h-10 w-10 shrink-0 place-items-center text-white/82
-        transition hover:text-white focus-visible:outline-2
-        focus-visible:outline-white/70"
-    >
-      {children}
-    </button>
-  );
-}
-
-function XIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill="none">
-      <path
-        d="M6 6l12 12M18 6 6 18"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="2"
-      />
-    </svg>
-  );
-}
-
-function DownloadIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill="none">
-      <path
-        d="M12 4v10m0 0 4-4m-4 4-4-4M5 20h14"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="2"
-      />
-    </svg>
-  );
-}
-
-function ChevronLeftIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-6 w-6" fill="none">
-      <path
-        d="m15 18-6-6 6-6"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="2"
-      />
-    </svg>
-  );
-}
-
-function ChevronRightIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-6 w-6" fill="none">
-      <path
-        d="m9 18 6-6-6-6"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="2"
-      />
-    </svg>
-  );
-}
-
 export default function Lightbox({
   image,
   currentIndex,
@@ -128,44 +35,10 @@ export default function Lightbox({
   onNext,
 }: LightboxProps) {
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
-  const [isDownloading, setIsDownloading] = useState(false);
-
-  const handleDownload = async (event: React.MouseEvent<HTMLButtonElement>) => {
-    event.stopPropagation();
-    if (!image || isDownloading) return;
-
-    setIsDownloading(true);
-    const downloadUrl = `/api/images/${encodeURIComponent(image.driveFileId)}?download=1`;
-
-    try {
-      const response = await fetch(downloadUrl);
-
-      if (!response.ok) {
-        throw new Error("Image download failed.");
-      }
-
-      const file = new File([await response.blob()], image.name, {
-        type: response.headers.get("Content-Type") ?? "image/jpeg",
-      });
-
-      if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: image.name });
-        return;
-      }
-
-      const objectUrl = URL.createObjectURL(file);
-      const link = document.createElement("a");
-      link.href = objectUrl;
-      link.download = image.name;
-      link.click();
-      URL.revokeObjectURL(objectUrl);
-    } catch (error: unknown) {
-      console.error("Image download failed:", error);
-      window.location.assign(downloadUrl);
-    } finally {
-      setIsDownloading(false);
-    }
-  };
+  const imageViewportRef = useRef<HTMLDivElement>(null);
+  const { handleDownload, isDownloading } = useImageDownload(image);
+  const { handleFullscreen, isFullscreen, isFullscreenAvailable } =
+    useFullscreen(imageViewportRef);
 
   useEffect(() => {
     const animationFrame = window.requestAnimationFrame(() => {
@@ -194,6 +67,7 @@ export default function Lightbox({
   }, [image, onClose, onNext, onPrevious]);
 
   if (!portalRoot) return null;
+
   return createPortal(
     <AnimatePresence>
       {image ? (
@@ -217,17 +91,28 @@ export default function Lightbox({
               onClose();
             }}
           >
-            <XIcon />
+            <CloseIcon />
           </IconButton>
+
+          {isFullscreenAvailable ? (
+            <IconButton
+              label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+              className="absolute right-4 bottom-19 z-20"
+              onClick={handleFullscreen}
+            >
+              <FullscreenIcon isFullscreen={isFullscreen} />
+            </IconButton>
+          ) : null}
 
           <button
             type="button"
             aria-label={`${image.name}をダウンロード`}
             disabled={isDownloading}
-            className="absolute right-4 bottom-4 z-20 grid h-11 w-11 place-items-center
-              rounded-full border border-white/20 bg-white/10 text-white shadow-lg
-              backdrop-blur-md transition hover:bg-white/20 focus-visible:outline-2
-              focus-visible:outline-white/70 disabled:cursor-wait disabled:opacity-60"
+            className="absolute right-4 bottom-4 z-20 grid h-11 w-11
+              place-items-center rounded-full border border-white/20 bg-white/10
+              text-white shadow-lg backdrop-blur-md transition hover:bg-white/20
+              focus-visible:outline-2 focus-visible:outline-white/70
+              disabled:cursor-wait disabled:opacity-60"
             onClick={handleDownload}
           >
             <DownloadIcon />
@@ -237,12 +122,26 @@ export default function Lightbox({
             className="grid h-full grid-rows-[1fr_auto] gap-4 px-4 py-16
               md:px-20"
           >
-            <ZoomableImage
-              key={image.driveFileId}
-              image={image}
-              onPrevious={onPrevious}
-              onNext={onNext}
-            />
+            <div
+              ref={imageViewportRef}
+              className="relative h-full min-h-0 w-full bg-zinc-950"
+            >
+              <ZoomableImage
+                key={image.driveFileId}
+                image={image}
+                onPrevious={onPrevious}
+                onNext={onNext}
+              />
+              {isFullscreen ? (
+                <IconButton
+                  label="Exit fullscreen"
+                  className="absolute right-4 bottom-4 z-20"
+                  onClick={handleFullscreen}
+                >
+                  <FullscreenIcon isFullscreen />
+                </IconButton>
+              ) : null}
+            </div>
             <div
               className="mx-auto grid w-full max-w-3xl gap-2 text-center"
               onClick={(event) => event.stopPropagation()}

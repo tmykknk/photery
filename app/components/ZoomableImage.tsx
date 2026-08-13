@@ -158,7 +158,7 @@ export default function ZoomableImage({
     <motion.div
       ref={containerRef}
       className="relative h-full min-h-0 w-full touch-none overflow-hidden
-        rounded-md select-none"
+        rounded-md bg-zinc-950 select-none"
       style={{ cursor: "grab" }}
       drag={isZoomed ? false : "x"}
       dragConstraints={{ left: 0, right: 0 }}

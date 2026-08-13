@@ -88,6 +88,7 @@ with check (true);
 3. 設定したパスワードを入力してログイン
 4. 管理者用パスワード（`ADMIN_PASSWORD`）でログインすると表示される `Sync` ボタンを押し、データ同期を実行（成功メッセージが出ればOK）
 5. 画像一覧と、ヘッダーの「すべて」およびフォルダ名タグが表示されるか確認。「すべて」は`GOOGLE_DRIVE_FOLDER_ID`のフォルダ順を優先し、各フォルダ内をファイル名昇順で最初の120枚から表示して、下端へ近づくと120枚ずつ自動で追加します。フォルダ名タグを選択した場合は、そのフォルダの画像をファイル名昇順で全件表示します。`GOOGLE_DRIVE_FOLDER_ID`を1つに戻して再同期すると、そのフォルダ以外の古い同期済み画像はギャラリーから削除されます
+6. 画像を開き、右下のダウンロードボタンを確認。スマホでは共有シートが開くため「画像を保存」を選択します。対応ブラウザでは右上の全画面ボタンでブラウザ全画面表示へ切り替えられます
 
 ## 5. Vercelにデプロイ
 
@@ -140,9 +141,15 @@ photery/
 │   │       └── route.ts
 │   ├── components/
 │   │   ├── AdminSyncButton.tsx
+│   │   ├── GalleryShell.tsx
+│   │   ├── IntroOverlay.tsx
 │   │   ├── Lightbox.tsx
+│   │   ├── LightboxControls.tsx
 │   │   ├── MasonryGallery.tsx
+│   │   ├── ZoomableImage.tsx
 │   │   ├── gallery-types.ts
+│   │   ├── useFullscreen.ts
+│   │   ├── useImageDownload.ts
 │   │   └── gallery-utils.ts
 │   ├── lib/
 │   │   ├── auth-token.ts
@@ -191,7 +198,7 @@ photery/
 - `app/api/auth/route.ts`: `VIEW_PASSWORD` / `ADMIN_PASSWORD` と入力値を照合し、成功時に生パスワードではなく派生トークンをCookieへ発行します。通常ログインでは `site_auth`、管理者ログインでは `site_auth` と `site_admin` を発行します。
 - `app/api/sync/route.ts`: Google Drive APIで指定フォルダ内の画像とフォルダ名を取得し、フォルダ名タグと`GOOGLE_DRIVE_FOLDER_ID`の配列順を `drive_images` テーブルへupsertします。通常の `site_auth` Cookieに加えて、`ADMIN_PASSWORD` ログイン時だけ発行される `site_admin` Cookieを検証するため、閲覧者だけでは同期や削除を実行できません。`GOOGLE_DRIVE_FOLDER_ID` は1つ、またはカンマ区切りの複数フォルダIDを指定できます。同期後は現在指定されていないフォルダ由来の古い行を削除し、ギャラリー内容を設定値に合わせます。
 - `app/api/cron/keep-alive/route.ts`: Supabaseの無料プラン自動停止を防ぐためのKeep-alive用APIです。Vercel Cronから定期的に実行され、環境変数 `CRON_SECRET` に基づく認証が行われます。
-- `app/api/images/[fileId]/route.ts`: Google Driveの非公開画像をサービスアカウント認証で取得し、クライアントへ安全にストリーミングします。`?variant=card` では最大800pxのDriveサムネイルを変換せずにストリーミングし、Vercel上でカードごとにSharpを実行する負荷を避けます。クエリなしでは原寸画像を取得でき、HEIC/HEIFはWebP変換またはGoogle Driveの高解像度サムネイル候補へフォールバックします。
+- `app/api/images/[fileId]/route.ts`: Google Driveの非公開画像をサービスアカウント認証で取得し、クライアントへ安全にストリーミングします。`?variant=card` では最大800pxのDriveサムネイルを変換せずにストリーミングし、Vercel上でカードごとにSharpを実行する負荷を避けます。`?download=1` は適切なファイル名を付けたダウンロード用レスポンスを返します。クエリなしでは原寸画像を取得でき、HEIC/HEIFはWebP変換またはGoogle Driveの高解像度サムネイル候補へフォールバックします。
 - `app/api/images/health/route.ts`: 認証済みユーザー向けの診断APIです。Supabase接続とGoogle Driveサービスアカウント認証を確認します。
 
 ### Components
@@ -199,7 +206,11 @@ photery/
 - `app/components/GalleryShell.tsx`: ヘッダー、フォルダ名タグによる表示切替、管理者用Syncボタンを担当します。「すべて」はフォルダ順とファイル名昇順、タグ選択時はファイル名昇順へ並べます。
 - `app/components/IntroOverlay.tsx`: 2秒のイントロアニメーションと0.55秒の退出を担当します。ギャラリーデータ取得から独立して先に描画され、Supabase待ち時間とイントロ表示時間を重ねます。
 - `app/components/MasonryGallery.tsx`: Masonryレイアウト、フォルダタグ付きカード表示、カードクリック時のLightbox起動を担当します。画像は左から右へ順にカラムへ割り当て、各カラム内ではその続きのファイル名順を保ちます。「すべて」は120枚ずつ自動追加し、初期DOMの肥大化を抑えます。フォルダ名タグ選択時は対象画像を全件表示します。カード比率はDriveファイルIDから安定して決定し、規則的な反復を避けます。最初の画面内候補だけを即時表示・高優先度にし、それ以外の画像はlazy読み込みします。
-- `app/components/Lightbox.tsx`: 全画面画像モーダルです。カードと同じ最大800pxのサムネイルを`object-contain`で表示してブラウザキャッシュを再利用し、キーボード操作、左右ナビゲーション、モバイルスワイプに対応します。
+- `app/components/Lightbox.tsx`: 画像モーダルの表示、キーボード操作、左右ナビゲーションを担当します。カードと同じ最大800pxのサムネイルを`object-contain`で表示してブラウザキャッシュを再利用し、モバイルスワイプに対応します。
+- `app/components/LightboxControls.tsx`: ライトボックスの操作ボタンとSVGアイコンをまとめた表示専用コンポーネントです。
+- `app/components/ZoomableImage.tsx`: ダブルタップ／ダブルクリックでの拡大、ピンチ操作、拡大中のパン、未拡大時のスワイプを担当します。
+- `app/components/useImageDownload.ts`: ダウンロード処理を担当します。対応スマホではWeb Share APIで共有シートを開き、未対応ブラウザではファイルダウンロードへフォールバックします。
+- `app/components/useFullscreen.ts`: Fullscreen APIの開始・終了と状態同期を担当します。非対応ブラウザでは全画面ボタンを表示しません。
 - `app/components/gallery-types.ts`: ギャラリーで使う共有TypeScript型を定義します。
 - `app/components/gallery-utils.ts`: JST基準の日付表示など、ギャラリー用の小さなユーティリティ関数を定義します。
 
