@@ -48,12 +48,15 @@ function createDownloadFilename(fileName: string, contentType: string): string {
   return trimmedName;
 }
 
-function createAttachmentDisposition(fileName: string): string {
+function createContentDisposition(
+  fileName: string,
+  dispositionType: "attachment" | "inline",
+): string {
   const fallbackName = fileName
     .replace(/[^\x20-\x7E]/g, "_")
     .replace(/[\\";]/g, "_");
 
-  return `attachment; filename="${fallbackName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
+  return `${dispositionType}; filename="${fallbackName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
 }
 
 function addDownloadHeader(
@@ -66,7 +69,27 @@ function addDownloadHeader(
 
   headers.set(
     "Content-Disposition",
-    createAttachmentDisposition(createDownloadFilename(fileName, contentType)),
+    createContentDisposition(
+      createDownloadFilename(fileName, contentType),
+      "attachment",
+    ),
+  );
+}
+
+function addInlineFileNameHeader(
+  headers: Headers,
+  fileName: string,
+  contentType: string,
+  shouldNameImage: boolean,
+) {
+  if (!shouldNameImage) return;
+
+  headers.set(
+    "Content-Disposition",
+    createContentDisposition(
+      createDownloadFilename(fileName, contentType),
+      "inline",
+    ),
   );
 }
 
@@ -156,6 +179,7 @@ export async function GET(request: Request, { params }: RouteContext) {
     const searchParams = new URL(request.url).searchParams;
     const isCardThumbnail = searchParams.get("variant") === "card";
     const shouldDownload = searchParams.get("download") === "1";
+    const shouldNameImage = searchParams.get("inline") === "1";
 
     if (isCardThumbnail) {
       const thumbnailResponse = await fetchDriveThumbnail(
@@ -165,6 +189,12 @@ export async function GET(request: Request, { params }: RouteContext) {
       );
 
       if (thumbnailResponse) {
+        addInlineFileNameHeader(
+          thumbnailResponse.headers,
+          fileName,
+          thumbnailResponse.headers.get("Content-Type") ?? "image/jpeg",
+          shouldNameImage,
+        );
         return thumbnailResponse;
       }
     }
@@ -205,6 +235,12 @@ export async function GET(request: Request, { params }: RouteContext) {
       headers.set("Content-Length", contentLength);
     }
     addDownloadHeader(headers, fileName, contentType, shouldDownload);
+    addInlineFileNameHeader(
+      headers,
+      fileName,
+      contentType,
+      shouldNameImage && !shouldDownload,
+    );
 
     // Stream through the server so private Drive files never expose credentials to the client.
     const stream = Readable.toWeb(

@@ -157,9 +157,9 @@ export default function ZoomableImage({
   return (
     <motion.div
       ref={containerRef}
-      className="relative h-full min-h-0 w-full touch-none overflow-hidden
+      className="relative h-full min-h-0 w-full touch-auto overflow-hidden
         rounded-md bg-zinc-950 select-none"
-      style={{ cursor: "grab" }}
+      style={{ cursor: "grab", WebkitTouchCallout: "default" }}
       drag={isZoomed ? false : "x"}
       dragConstraints={{ left: 0, right: 0 }}
       dragElastic={0.16}
@@ -201,7 +201,7 @@ export default function ZoomableImage({
             alt={image.name}
             fill
             sizes="100vw"
-            className="pointer-events-none object-contain"
+            className="object-contain"
             priority
             unoptimized
           />

@@ -94,9 +94,10 @@ function normalizeImage(row: DriveImageRow): GalleryImage {
   return {
     driveFileId: row.drive_file_id,
     name,
+    originalFileName: originalName,
     thumbnailUrl: `/api/images/${encodeURIComponent(
       row.drive_file_id,
-    )}?variant=card`,
+    )}?variant=card&inline=1`,
     tags: (row.tags ?? []).map((tag) => tag.trim()).filter(Boolean),
     folderOrder: row.folder_order ?? Number.MAX_SAFE_INTEGER,
     capturedAt: row.created_at ?? null,

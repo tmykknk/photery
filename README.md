@@ -88,7 +88,7 @@ with check (true);
 3. 設定したパスワードを入力してログイン
 4. 管理者用パスワード（`ADMIN_PASSWORD`）でログインすると表示される `Sync` ボタンを押し、データ同期を実行（成功メッセージが出ればOK）
 5. 画像一覧と、ヘッダーの「すべて」およびフォルダ名タグが表示されるか確認。「すべて」は`GOOGLE_DRIVE_FOLDER_ID`のフォルダ順を優先し、各フォルダ内をファイル名昇順で最初の120枚から表示して、下端へ近づくと120枚ずつ自動で追加します。フォルダ名タグを選択した場合は、そのフォルダの画像をファイル名昇順で全件表示します。`GOOGLE_DRIVE_FOLDER_ID`を1つに戻して再同期すると、そのフォルダ以外の古い同期済み画像はギャラリーから削除されます
-6. 画像を開き、右下のダウンロードボタンを確認。スマホでは共有シートが開くため「画像を保存」を選択します。対応ブラウザでは右上の全画面ボタンでブラウザ全画面表示へ切り替えられます
+6. 画像を開き、右下のダウンロードボタンを確認。スマホでは共有シートが開くため「画像を保存」を選択します。表示中の画像は長押しして、iOS標準の保存メニューからも保存できます。対応ブラウザでは右下の全画面ボタンで画像領域だけを全画面表示へ切り替えられます
 
 ## 5. Vercelにデプロイ
 
@@ -198,7 +198,7 @@ photery/
 - `app/api/auth/route.ts`: `VIEW_PASSWORD` / `ADMIN_PASSWORD` と入力値を照合し、成功時に生パスワードではなく派生トークンをCookieへ発行します。通常ログインでは `site_auth`、管理者ログインでは `site_auth` と `site_admin` を発行します。
 - `app/api/sync/route.ts`: Google Drive APIで指定フォルダ内の画像とフォルダ名を取得し、フォルダ名タグと`GOOGLE_DRIVE_FOLDER_ID`の配列順を `drive_images` テーブルへupsertします。通常の `site_auth` Cookieに加えて、`ADMIN_PASSWORD` ログイン時だけ発行される `site_admin` Cookieを検証するため、閲覧者だけでは同期や削除を実行できません。`GOOGLE_DRIVE_FOLDER_ID` は1つ、またはカンマ区切りの複数フォルダIDを指定できます。同期後は現在指定されていないフォルダ由来の古い行を削除し、ギャラリー内容を設定値に合わせます。
 - `app/api/cron/keep-alive/route.ts`: Supabaseの無料プラン自動停止を防ぐためのKeep-alive用APIです。Vercel Cronから定期的に実行され、環境変数 `CRON_SECRET` に基づく認証が行われます。
-- `app/api/images/[fileId]/route.ts`: Google Driveの非公開画像をサービスアカウント認証で取得し、クライアントへ安全にストリーミングします。`?variant=card` では最大800pxのDriveサムネイルを変換せずにストリーミングし、Vercel上でカードごとにSharpを実行する負荷を避けます。`?download=1` は適切なファイル名を付けたダウンロード用レスポンスを返します。クエリなしでは原寸画像を取得でき、HEIC/HEIFはWebP変換またはGoogle Driveの高解像度サムネイル候補へフォールバックします。
+- `app/api/images/[fileId]/route.ts`: Google Driveの非公開画像をサービスアカウント認証で取得し、クライアントへ安全にストリーミングします。`?variant=card` では最大800pxのDriveサムネイルを変換せずにストリーミングし、Vercel上でカードごとにSharpを実行する負荷を避けます。`?download=1` は適切なファイル名を付けたダウンロード用レスポンスを返し、`?inline=1` は長押し保存用にインライン表示のままファイル名を伝えます。クエリなしでは原寸画像を取得でき、HEIC/HEIFはWebP変換またはGoogle Driveの高解像度サムネイル候補へフォールバックします。
 - `app/api/images/health/route.ts`: 認証済みユーザー向けの診断APIです。Supabase接続とGoogle Driveサービスアカウント認証を確認します。
 
 ### Components

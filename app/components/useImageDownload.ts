@@ -1,6 +1,22 @@
 import { useCallback, useState, type MouseEvent } from "react";
 import type { GalleryImage } from "./gallery-types";
 
+function getDownloadFileName(contentDisposition: string | null): string | null {
+  if (!contentDisposition) return null;
+
+  const utf8FileName = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8FileName?.[1]) {
+    try {
+      return decodeURIComponent(utf8FileName[1]);
+    } catch {
+      return null;
+    }
+  }
+
+  const fallbackFileName = contentDisposition.match(/filename="?([^";]+)"?/i);
+  return fallbackFileName?.[1] ?? null;
+}
+
 export function useImageDownload(image: GalleryImage | null) {
   const [isDownloading, setIsDownloading] = useState(false);
 
@@ -19,7 +35,10 @@ export function useImageDownload(image: GalleryImage | null) {
           throw new Error("Image download failed.");
         }
 
-        const file = new File([await response.blob()], image.name, {
+        const fileName =
+          getDownloadFileName(response.headers.get("Content-Disposition")) ??
+          image.originalFileName;
+        const file = new File([await response.blob()], fileName, {
           type: response.headers.get("Content-Type") ?? "image/jpeg",
         });
 
@@ -31,7 +50,7 @@ export function useImageDownload(image: GalleryImage | null) {
         const objectUrl = URL.createObjectURL(file);
         const link = document.createElement("a");
         link.href = objectUrl;
-        link.download = image.name;
+        link.download = fileName;
         link.click();
         URL.revokeObjectURL(objectUrl);
       } catch (error: unknown) {
