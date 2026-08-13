@@ -77,6 +77,20 @@ function XIcon() {
   );
 }
 
+function DownloadIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill="none">
+      <path
+        d="M12 4v10m0 0 4-4m-4 4-4-4M5 20h14"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+    </svg>
+  );
+}
+
 function ChevronLeftIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="h-6 w-6" fill="none">
@@ -114,6 +128,44 @@ export default function Lightbox({
   onNext,
 }: LightboxProps) {
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const handleDownload = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (!image || isDownloading) return;
+
+    setIsDownloading(true);
+    const downloadUrl = `/api/images/${encodeURIComponent(image.driveFileId)}?download=1`;
+
+    try {
+      const response = await fetch(downloadUrl);
+
+      if (!response.ok) {
+        throw new Error("Image download failed.");
+      }
+
+      const file = new File([await response.blob()], image.name, {
+        type: response.headers.get("Content-Type") ?? "image/jpeg",
+      });
+
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: image.name });
+        return;
+      }
+
+      const objectUrl = URL.createObjectURL(file);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = image.name;
+      link.click();
+      URL.revokeObjectURL(objectUrl);
+    } catch (error: unknown) {
+      console.error("Image download failed:", error);
+      window.location.assign(downloadUrl);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   useEffect(() => {
     const animationFrame = window.requestAnimationFrame(() => {
@@ -167,6 +219,19 @@ export default function Lightbox({
           >
             <XIcon />
           </IconButton>
+
+          <button
+            type="button"
+            aria-label={`${image.name}をダウンロード`}
+            disabled={isDownloading}
+            className="absolute right-4 bottom-4 z-20 grid h-11 w-11 place-items-center
+              rounded-full border border-white/20 bg-white/10 text-white shadow-lg
+              backdrop-blur-md transition hover:bg-white/20 focus-visible:outline-2
+              focus-visible:outline-white/70 disabled:cursor-wait disabled:opacity-60"
+            onClick={handleDownload}
+          >
+            <DownloadIcon />
+          </button>
 
           <div
             className="grid h-full grid-rows-[1fr_auto] gap-4 px-4 py-16

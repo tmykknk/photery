@@ -38,14 +38,53 @@ function getHeaderValue(
   return value ?? null;
 }
 
-function createWebpResponse(webpBuffer: Buffer): Response {
+function createDownloadFilename(fileName: string, contentType: string): string {
+  const trimmedName = fileName.trim() || "image";
+
+  if (contentType === "image/webp") {
+    return trimmedName.replace(/\.[^.]+$/, "") + ".webp";
+  }
+
+  return trimmedName;
+}
+
+function createAttachmentDisposition(fileName: string): string {
+  const fallbackName = fileName
+    .replace(/[^\x20-\x7E]/g, "_")
+    .replace(/[\\";]/g, "_");
+
+  return `attachment; filename="${fallbackName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
+}
+
+function addDownloadHeader(
+  headers: Headers,
+  fileName: string,
+  contentType: string,
+  shouldDownload: boolean,
+) {
+  if (!shouldDownload) return;
+
+  headers.set(
+    "Content-Disposition",
+    createAttachmentDisposition(createDownloadFilename(fileName, contentType)),
+  );
+}
+
+function createWebpResponse(
+  webpBuffer: Buffer,
+  fileName: string,
+  shouldDownload: boolean,
+): Response {
+  const headers = new Headers({
+    "Cache-Control": "private, max-age=3600",
+    "Content-Length": webpBuffer.byteLength.toString(),
+    "Content-Type": "image/webp",
+    "X-Content-Type-Options": "nosniff",
+  });
+  addDownloadHeader(headers, fileName, "image/webp", shouldDownload);
+
   return new Response(bufferToArrayBuffer(webpBuffer), {
-    headers: new Headers({
-      "Cache-Control": "private, max-age=3600",
-      "Content-Length": webpBuffer.byteLength.toString(),
-      "Content-Type": "image/webp",
-      "X-Content-Type-Options": "nosniff",
-    }),
+    headers,
   });
 }
 
@@ -58,9 +97,15 @@ async function handleHeicImage(
   stream: Readable,
   thumbnailUrl: string | null,
   auth: ReturnType<typeof createDriveAuth>,
+  fileName: string,
+  shouldDownload: boolean,
 ): Promise<Response> {
   try {
-    return createWebpResponse(await convertHeicToWebp(stream));
+    return createWebpResponse(
+      await convertHeicToWebp(stream),
+      fileName,
+      shouldDownload,
+    );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.warn("HEIC conversion failed; trying Drive thumbnail:", message);
@@ -68,6 +113,12 @@ async function handleHeicImage(
     const thumbnailResponse = await fetchDriveThumbnail(thumbnailUrl, auth);
 
     if (thumbnailResponse) {
+      addDownloadHeader(
+        thumbnailResponse.headers,
+        fileName,
+        thumbnailResponse.headers.get("Content-Type") ?? "image/jpeg",
+        shouldDownload,
+      );
       return thumbnailResponse;
     }
 
@@ -100,9 +151,11 @@ export async function GET(request: Request, { params }: RouteContext) {
       return new Response("Not found", { status: 404 });
     }
 
+    const fileName = syncedImage.name?.trim() || "image";
     const auth = createDriveAuth();
-    const isCardThumbnail =
-      new URL(request.url).searchParams.get("variant") === "card";
+    const searchParams = new URL(request.url).searchParams;
+    const isCardThumbnail = searchParams.get("variant") === "card";
+    const shouldDownload = searchParams.get("download") === "1";
 
     if (isCardThumbnail) {
       const thumbnailResponse = await fetchDriveThumbnail(
@@ -132,7 +185,13 @@ export async function GET(request: Request, { params }: RouteContext) {
       getHeaderValue(response.headers, "content-type") ?? "image/jpeg";
 
     if (isHeicImage(contentType, syncedImage.name)) {
-      return handleHeicImage(response.data, syncedImage.thumbnail_url, auth);
+      return handleHeicImage(
+        response.data,
+        syncedImage.thumbnail_url,
+        auth,
+        fileName,
+        shouldDownload,
+      );
     }
 
     const headers = new Headers({
@@ -145,6 +204,7 @@ export async function GET(request: Request, { params }: RouteContext) {
     if (contentLength) {
       headers.set("Content-Length", contentLength);
     }
+    addDownloadHeader(headers, fileName, contentType, shouldDownload);
 
     // Stream through the server so private Drive files never expose credentials to the client.
     const stream = Readable.toWeb(
