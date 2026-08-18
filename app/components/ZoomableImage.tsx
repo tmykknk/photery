@@ -195,9 +195,9 @@ export default function ZoomableImage({
             : { type: "spring", stiffness: 300, damping: 30 }
         }
       >
-        {image.thumbnailUrl ? (
+        {image.lightboxUrl || image.thumbnailUrl ? (
           <Image
-            src={image.thumbnailUrl}
+            src={image.lightboxUrl || image.thumbnailUrl}
             alt={image.name}
             fill
             sizes="100vw"

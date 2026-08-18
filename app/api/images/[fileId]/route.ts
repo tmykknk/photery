@@ -63,10 +63,7 @@ function addDownloadHeader(
   headers: Headers,
   fileName: string,
   contentType: string,
-  shouldDownload: boolean,
 ) {
-  if (!shouldDownload) return;
-
   headers.set(
     "Content-Disposition",
     createContentDisposition(
@@ -80,10 +77,7 @@ function addInlineFileNameHeader(
   headers: Headers,
   fileName: string,
   contentType: string,
-  shouldNameImage: boolean,
 ) {
-  if (!shouldNameImage) return;
-
   headers.set(
     "Content-Disposition",
     createContentDisposition(
@@ -96,15 +90,20 @@ function addInlineFileNameHeader(
 function createWebpResponse(
   webpBuffer: Buffer,
   fileName: string,
-  shouldDownload: boolean,
+  isDownload: boolean,
 ): Response {
   const headers = new Headers({
-    "Cache-Control": "private, max-age=3600",
+    "Cache-Control": "private, max-age=31536000, immutable",
     "Content-Length": webpBuffer.byteLength.toString(),
     "Content-Type": "image/webp",
     "X-Content-Type-Options": "nosniff",
   });
-  addDownloadHeader(headers, fileName, "image/webp", shouldDownload);
+
+  if (isDownload) {
+    addDownloadHeader(headers, fileName, "image/webp");
+  } else {
+    addInlineFileNameHeader(headers, fileName, "image/webp");
+  }
 
   return new Response(bufferToArrayBuffer(webpBuffer), {
     headers,
@@ -121,13 +120,13 @@ async function handleHeicImage(
   thumbnailUrl: string | null,
   auth: ReturnType<typeof createDriveAuth>,
   fileName: string,
-  shouldDownload: boolean,
+  isDownload: boolean,
 ): Promise<Response> {
   try {
     return createWebpResponse(
       await convertHeicToWebp(stream),
       fileName,
-      shouldDownload,
+      isDownload,
     );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
@@ -136,12 +135,13 @@ async function handleHeicImage(
     const thumbnailResponse = await fetchDriveThumbnail(thumbnailUrl, auth);
 
     if (thumbnailResponse) {
-      addDownloadHeader(
-        thumbnailResponse.headers,
-        fileName,
-        thumbnailResponse.headers.get("Content-Type") ?? "image/jpeg",
-        shouldDownload,
-      );
+      if (isDownload) {
+        addDownloadHeader(
+          thumbnailResponse.headers,
+          fileName,
+          thumbnailResponse.headers.get("Content-Type") ?? "image/jpeg",
+        );
+      }
       return thumbnailResponse;
     }
 
@@ -177,28 +177,32 @@ export async function GET(request: Request, { params }: RouteContext) {
     const fileName = syncedImage.name?.trim() || "image";
     const auth = createDriveAuth();
     const searchParams = new URL(request.url).searchParams;
-    const isCardThumbnail = searchParams.get("variant") === "card";
-    const shouldDownload = searchParams.get("download") === "1";
-    const shouldNameImage = searchParams.get("inline") === "1";
+    const variant = searchParams.get("variant");
+    const isDownloadRequest = searchParams.get("download") === "1";
+    const isInline = searchParams.get("inline") === "1";
 
-    if (isCardThumbnail) {
+    // 1. Try serving resized thumbnail for display requests (variant=card or lightbox)
+    if (!isDownloadRequest && (variant === "card" || variant === "lightbox")) {
+      const preferredSize = variant === "card" ? 600 : 1400;
       const thumbnailResponse = await fetchDriveThumbnail(
         syncedImage.thumbnail_url,
         auth,
-        { preferredSize: 800 },
+        { preferredSize },
       );
 
       if (thumbnailResponse) {
-        addInlineFileNameHeader(
-          thumbnailResponse.headers,
-          fileName,
-          thumbnailResponse.headers.get("Content-Type") ?? "image/jpeg",
-          shouldNameImage,
-        );
+        if (isInline) {
+          addInlineFileNameHeader(
+            thumbnailResponse.headers,
+            fileName,
+            thumbnailResponse.headers.get("Content-Type") ?? "image/jpeg",
+          );
+        }
         return thumbnailResponse;
       }
     }
 
+    // 2. Full-size streaming (for downloads or fallback when thumbnail is unavailable)
     const drive = createDriveClient(auth);
     const response = await drive.files.get(
       { fileId, alt: "media" },
@@ -220,12 +224,12 @@ export async function GET(request: Request, { params }: RouteContext) {
         syncedImage.thumbnail_url,
         auth,
         fileName,
-        shouldDownload,
+        isDownloadRequest,
       );
     }
 
     const headers = new Headers({
-      "Cache-Control": "private, max-age=3600",
+      "Cache-Control": "private, max-age=31536000, immutable",
       "Content-Type": contentType,
       "X-Content-Type-Options": "nosniff",
     });
@@ -234,15 +238,13 @@ export async function GET(request: Request, { params }: RouteContext) {
     if (contentLength) {
       headers.set("Content-Length", contentLength);
     }
-    addDownloadHeader(headers, fileName, contentType, shouldDownload);
-    addInlineFileNameHeader(
-      headers,
-      fileName,
-      contentType,
-      shouldNameImage && !shouldDownload,
-    );
 
-    // Stream through the server so private Drive files never expose credentials to the client.
+    if (isDownloadRequest) {
+      addDownloadHeader(headers, fileName, contentType);
+    } else if (isInline) {
+      addInlineFileNameHeader(headers, fileName, contentType);
+    }
+
     const stream = Readable.toWeb(
       response.data,
     ) as unknown as ReadableStream<Uint8Array>;

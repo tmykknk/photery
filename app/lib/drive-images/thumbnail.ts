@@ -76,7 +76,7 @@ async function fetchAuthorizedImage(
   }
 
   const headers = new Headers({
-    "Cache-Control": "private, max-age=3600",
+    "Cache-Control": "private, max-age=31536000, immutable",
     "Content-Type": contentType,
     "X-Content-Type-Options": "nosniff",
   });

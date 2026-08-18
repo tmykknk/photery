@@ -3,6 +3,7 @@ export interface GalleryImage {
   name: string;
   originalFileName: string;
   thumbnailUrl: string;
+  lightboxUrl: string;
   tags: string[];
   folderOrder: number;
   capturedAt: string | null;
