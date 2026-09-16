@@ -3,12 +3,6 @@ import "server-only";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { DriveImageFile } from "./google-drive";
 
-export interface DriveImageRow {
-  drive_file_id: string;
-  name: string | null;
-  thumbnail_url: string | null;
-}
-
 interface DriveImageIdRow {
   drive_file_id: string;
 }
@@ -48,41 +42,6 @@ function isDriveImageIdRow(value: unknown): value is DriveImageIdRow {
   );
 }
 
-function isDriveImageRow(value: unknown): value is DriveImageRow {
-  return (
-    isDriveImageIdRow(value) &&
-    "name" in value &&
-    (typeof value.name === "string" || value.name === null) &&
-    "thumbnail_url" in value &&
-    (typeof value.thumbnail_url === "string" || value.thumbnail_url === null)
-  );
-}
-
-export async function getSyncedDriveImage(
-  fileId: string,
-): Promise<DriveImageRow | null> {
-  const supabase = createDriveImageAdminClient();
-  const { data, error } = await supabase
-    .from("drive_images")
-    .select("drive_file_id, name, thumbnail_url")
-    .eq("drive_file_id", fileId)
-    .maybeSingle();
-
-  if (error) {
-    throw error;
-  }
-
-  if (data === null) {
-    return null;
-  }
-
-  if (!isDriveImageRow(data)) {
-    throw new Error("Synced Drive image row had an unexpected shape.");
-  }
-
-  return data;
-}
-
 export async function upsertDriveImages(
   files: DriveImageFile[],
 ): Promise<void> {
@@ -95,9 +54,10 @@ export async function upsertDriveImages(
     files.map((file) => ({
       drive_file_id: file.id,
       name: file.name,
-      thumbnail_url: file.thumbnailLink,
       tags: file.tags,
       folder_order: file.folderOrder,
+      width: file.width,
+      height: file.height,
     })),
     { onConflict: "drive_file_id" },
   );

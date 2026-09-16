@@ -1,6 +1,9 @@
 allowBuilds:
+  # Next.jsが任意依存として解決するsharpのpostinstallを許可する。
   sharp: true
   unrs-resolver: true
+  esbuild: true
+  workerd: true
 
 supportedArchitectures:
   os:

@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, type PanInfo } from "framer-motion";
-import Image from "next/image";
+import PrivateImage from "./PrivateImage";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { GalleryImage } from "./gallery-types";
 
@@ -196,14 +196,12 @@ export default function ZoomableImage({
         }
       >
         {image.lightboxUrl || image.thumbnailUrl ? (
-          <Image
+          <PrivateImage
             src={image.lightboxUrl || image.thumbnailUrl}
             alt={image.name}
-            fill
-            sizes="100vw"
             className="object-contain"
-            priority
-            unoptimized
+            eager
+            canRetry
           />
         ) : (
           <div className="flex h-full items-center justify-center text-zinc-300">

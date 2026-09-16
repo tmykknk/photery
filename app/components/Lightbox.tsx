@@ -21,6 +21,7 @@ interface LightboxProps {
   image: GalleryImage | null;
   currentIndex: number | null;
   totalCount: number;
+  navigationStatus?: string;
   onClose: () => void;
   onPrevious: () => void;
   onNext: () => void;
@@ -30,6 +31,7 @@ export default function Lightbox({
   image,
   currentIndex,
   totalCount,
+  navigationStatus,
   onClose,
   onPrevious,
   onNext,
@@ -176,6 +178,11 @@ export default function Lightbox({
                 ) : null}
               </div>
               <h2 className="truncate text-lg font-semibold">{image.name}</h2>
+              {navigationStatus ? (
+                <p role="status" className="text-sm text-zinc-300">
+                  {navigationStatus}
+                </p>
+              ) : null}
             </div>
           </div>
         </motion.div>

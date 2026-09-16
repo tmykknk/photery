@@ -5,15 +5,20 @@ import { google } from "googleapis";
 export interface DriveImageFile {
   id: string;
   name: string | null;
-  thumbnailLink: string | null;
   tags: string[];
   folderOrder: number;
+  width: number | null;
+  height: number | null;
 }
 
 interface DriveImageMetadata {
   id: string;
   name: string | null;
-  thumbnailLink: string | null;
+  imageMediaMetadata?: {
+    width?: number | null;
+    height?: number | null;
+    rotation?: number | null;
+  } | null;
 }
 
 export type GoogleDriveAuth = ReturnType<typeof createDriveAuth>;
@@ -50,7 +55,11 @@ export function getDriveFolderIds(): string[] {
 function isDriveImageFile(file: {
   id?: string | null;
   name?: string | null;
-  thumbnailLink?: string | null;
+  imageMediaMetadata?: {
+    width?: number | null;
+    height?: number | null;
+    rotation?: number | null;
+  } | null;
 }): file is DriveImageMetadata {
   return typeof file.id === "string" && file.id.length > 0;
 }
@@ -79,7 +88,8 @@ export async function listDriveImagesInFolders(
     do {
       const res = await drive.files.list({
         q: `'${folderId}' in parents and mimeType contains 'image/' and trashed = false`,
-        fields: "nextPageToken, files(id, name, thumbnailLink)",
+        fields:
+          "nextPageToken, files(id, name, imageMediaMetadata(width,height,rotation))",
         pageSize: 1000,
         pageToken,
       });
@@ -101,6 +111,14 @@ export async function listDriveImagesInFolders(
               ...file,
               tags: [folderName],
               folderOrder,
+              width:
+                (file.imageMediaMetadata?.rotation ?? 0) % 2
+                  ? (file.imageMediaMetadata?.height ?? null)
+                  : (file.imageMediaMetadata?.width ?? null),
+              height:
+                (file.imageMediaMetadata?.rotation ?? 0) % 2
+                  ? (file.imageMediaMetadata?.width ?? null)
+                  : (file.imageMediaMetadata?.height ?? null),
             });
           }
         }

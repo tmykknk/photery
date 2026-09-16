@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, type Variants } from "framer-motion";
-import Image from "next/image";
+import PrivateImage from "./PrivateImage";
 import { useEffect, useRef, useState } from "react";
 import Lightbox from "./Lightbox";
 import type { GalleryImage } from "./gallery-types";
@@ -10,6 +10,9 @@ import { getImageDateLabel } from "./gallery-utils";
 interface MasonryGalleryProps {
   images: GalleryImage[];
   progressivelyRender: boolean;
+  hasMore: boolean;
+  totalCount: number;
+  onLoadMore: () => Promise<number>;
 }
 
 interface MasonrySectionsProps {
@@ -43,6 +46,7 @@ const cardVariants: Variants = {
 };
 
 function getStableAspectRatio(image: GalleryImage): number {
+  if (image.aspectRatio && image.aspectRatio > 0) return image.aspectRatio;
   const ratios = [0.68, 0.74, 0.8, 0.9, 1, 1.12, 1.22, 1.32];
   let hash = 2166136261;
 
@@ -135,17 +139,13 @@ function GalleryCard({
         style={{ aspectRatio: getStableAspectRatio(image) }}
       >
         {image.thumbnailUrl ? (
-          <Image
+          <PrivateImage
             src={image.thumbnailUrl}
             alt={image.name}
-            fill
-            sizes="(max-width: 767px) 50vw, (max-width: 1024px) 33vw, 25vw"
             className="object-cover grayscale-0 transition duration-200 ease-out
               md:grayscale md:group-hover:scale-[1.025]
               md:group-hover:grayscale-0"
-            loading={shouldLoadEagerly ? "eager" : "lazy"}
-            fetchPriority={shouldPrioritize ? "high" : "auto"}
-            unoptimized
+            eager={shouldLoadEagerly && shouldPrioritize}
           />
         ) : (
           <div
@@ -197,7 +197,7 @@ function MasonrySections({
   const columnCount = useResponsiveColumnCount();
   const columns = distributeImagesAcrossColumns(renderedImages, columnCount);
   const eagerImageIndices = new Set(
-    renderedImages.slice(0, columnCount * 5).map((_, index) => index),
+    renderedImages.slice(0, columnCount * 2).map((_, index) => index),
   );
   const priorityImageIndices = new Set(
     renderedImages.slice(0, columnCount * 2).map((_, index) => index),
@@ -270,8 +270,20 @@ function MasonrySections({
 export default function MasonryGallery({
   images,
   progressivelyRender,
+  hasMore,
+  totalCount,
+  onLoadMore,
 }: MasonryGalleryProps) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const navigationBusy = useRef(false);
+  const [navigationStatus, setNavigationStatus] = useState("");
+  const navigationVersion = useRef(0);
+  useEffect(
+    () => () => {
+      navigationVersion.current++;
+    },
+    [],
+  );
 
   const activeImage =
     activeIndex === null ? null : (images[activeIndex] ?? null);
@@ -282,15 +294,31 @@ export default function MasonryGallery({
     }
 
     setActiveIndex((current) =>
-      current === null ? null : (current - 1 + images.length) % images.length,
+      current === null ? null : Math.max(0, current - 1),
     );
   };
 
-  const showNextImage = () => {
-    if (images.length === 0) {
+  const showNextImage = async () => {
+    if (images.length === 0 || activeIndex === null || navigationBusy.current) {
       return;
     }
-
+    if (activeIndex === images.length - 1 && hasMore) {
+      navigationBusy.current = true;
+      const version = navigationVersion.current;
+      setNavigationStatus("次の画像を読み込み中…");
+      const added = await onLoadMore();
+      navigationBusy.current = false;
+      if (version !== navigationVersion.current) return;
+      setNavigationStatus(
+        added ? "" : "次の画像を読み込めませんでした。矢印で再試行できます。",
+      );
+      if (added)
+        setActiveIndex((current) =>
+          current === activeIndex ? current + 1 : current,
+        );
+      return;
+    }
+    setNavigationStatus("");
     setActiveIndex((current) =>
       current === null ? null : (current + 1) % images.length,
     );
@@ -317,8 +345,13 @@ export default function MasonryGallery({
       <Lightbox
         image={activeImage}
         currentIndex={activeIndex}
-        totalCount={images.length}
-        onClose={() => setActiveIndex(null)}
+        totalCount={totalCount}
+        navigationStatus={navigationStatus}
+        onClose={() => {
+          navigationVersion.current++;
+          setActiveIndex(null);
+          setNavigationStatus("");
+        }}
         onPrevious={showPreviousImage}
         onNext={showNextImage}
       />

@@ -6,3 +6,5 @@ coverage
 pnpm-lock.yaml
 
 .agents
+.wrangler
+workers/images/worker-configuration.d.ts

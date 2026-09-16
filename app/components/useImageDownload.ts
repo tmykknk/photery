@@ -1,71 +1,47 @@
 import { useCallback, useState, type MouseEvent } from "react";
 import type { GalleryImage } from "./gallery-types";
-
-function getDownloadFileName(contentDisposition: string | null): string | null {
-  if (!contentDisposition) return null;
-
-  const utf8FileName = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
-  if (utf8FileName?.[1]) {
-    try {
-      return decodeURIComponent(utf8FileName[1]);
-    } catch {
-      return null;
-    }
-  }
-
-  const fallbackFileName = contentDisposition.match(/filename="?([^";]+)"?/i);
-  return fallbackFileName?.[1] ?? null;
-}
+import { imageClient } from "./image-client";
 
 export function useImageDownload(image: GalleryImage | null) {
   const [isDownloading, setIsDownloading] = useState(false);
-
   const handleDownload = useCallback(
     async (event: MouseEvent<HTMLButtonElement>) => {
       event.stopPropagation();
       if (!image || isDownloading) return;
-
       setIsDownloading(true);
-      const downloadUrl = `/api/images/${encodeURIComponent(image.driveFileId)}?download=1`;
-
       try {
-        const response = await fetch(downloadUrl);
-
-        if (!response.ok) {
-          throw new Error("Image download failed.");
-        }
-
-        const fileName =
-          getDownloadFileName(response.headers.get("Content-Disposition")) ??
-          image.originalFileName;
-        const file = new File([await response.blob()], fileName, {
-          type: response.headers.get("Content-Type") ?? "image/jpeg",
-        });
-
+        // 原本はWorkerからだけ取得し、予備転送枠を消費しない。
+        const { blob, fileName } = await imageClient.load(
+          `/api/images/${encodeURIComponent(image.driveFileId)}?download=1`,
+          new AbortController().signal,
+          true,
+        );
+        const file = new File([blob], fileName, { type: blob.type });
         if (navigator.canShare?.({ files: [file] })) {
-          await navigator.share({ files: [file], title: image.name });
-          return;
+          try {
+            await navigator.share({ files: [file], title: image.name });
+            return;
+          } catch (error) {
+            if (error instanceof DOMException && error.name === "AbortError")
+              return;
+            // 共有に失敗しても取得済みBlobを再利用する。
+          }
         }
-
         const objectUrl = URL.createObjectURL(file);
         const link = document.createElement("a");
         link.href = objectUrl;
         link.download = fileName;
         link.click();
-        URL.revokeObjectURL(objectUrl);
-      } catch (error: unknown) {
-        if (error instanceof DOMException && error.name === "AbortError") {
-          return;
-        }
-
-        console.error("Image download failed:", error);
-        window.location.assign(downloadUrl);
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+      } catch {
+        window.alert(
+          "画像を保存できませんでした。時間をおいて再試行してください。",
+        );
       } finally {
         setIsDownloading(false);
       }
     },
     [image, isDownloading],
   );
-
   return { handleDownload, isDownloading };
 }

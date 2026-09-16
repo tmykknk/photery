@@ -1,52 +1,107 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import AdminSyncButton from "./AdminSyncButton";
-import type { GalleryImage } from "./gallery-types";
+import type { GalleryPage } from "./gallery-types";
 import MasonryGallery from "./MasonryGallery";
 
 interface GalleryShellProps {
-  images: GalleryImage[];
+  initialPage: GalleryPage;
+  tags: string[];
   isAdmin: boolean;
 }
 
-const fileNameCollator = new Intl.Collator("ja", {
-  numeric: true,
-  sensitivity: "base",
-});
-
-function compareByFileName(a: GalleryImage, b: GalleryImage): number {
-  const nameComparison = fileNameCollator.compare(a.name, b.name);
-
-  return nameComparison || a.driveFileId.localeCompare(b.driveFileId);
-}
-
-function compareAllImages(a: GalleryImage, b: GalleryImage): number {
-  return a.folderOrder - b.folderOrder || compareByFileName(a, b);
-}
-
-export default function GalleryShell({ images, isAdmin }: GalleryShellProps) {
+export default function GalleryShell({
+  initialPage,
+  tags,
+  isAdmin,
+}: GalleryShellProps) {
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
-  const tags = useMemo(
-    () => [
-      ...new Set(
-        [...images].sort(compareAllImages).flatMap((image) => image.tags),
-      ),
-    ],
-    [images],
-  );
-  const activeTag =
-    selectedTag !== null && tags.includes(selectedTag) ? selectedTag : null;
-  const sortedImages = useMemo(() => {
-    const matchingImages =
-      activeTag === null
-        ? images
-        : images.filter((image) => image.tags.includes(activeTag));
+  const [page, setPage] = useState(initialPage);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const requestRef = useRef<AbortController | null>(null);
+  const moreRequestRef = useRef<Promise<number> | null>(null);
+  const nextPageRef = useRef<HTMLDivElement>(null);
+  const activeTag = selectedTag;
 
-    return [...matchingImages].sort(
-      activeTag === null ? compareAllImages : compareByFileName,
+  const loadPage = useCallback(
+    async (tag: string | null, offset: number, replace: boolean) => {
+      requestRef.current?.abort();
+      const controller = new AbortController();
+      requestRef.current = controller;
+      setLoading(true);
+      setError(false);
+      try {
+        const query = new URLSearchParams({ offset: String(offset) });
+        if (tag !== null) query.set("tag", tag);
+        const response = await fetch(`/api/gallery?${query}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error("Gallery request failed");
+        const nextPage: GalleryPage = await response.json();
+        if (controller.signal.aborted) return 0;
+        setPage((current) => ({
+          ...nextPage,
+          images: replace
+            ? nextPage.images
+            : [
+                ...current.images,
+                ...nextPage.images.filter(
+                  (image) =>
+                    !current.images.some(
+                      (loaded) => loaded.driveFileId === image.driveFileId,
+                    ),
+                ),
+              ],
+        }));
+        return nextPage.images.length;
+      } catch {
+        if (!controller.signal.aborted) setError(true);
+        return 0;
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    },
+    [],
+  );
+
+  const loadMore = useCallback((): Promise<number> => {
+    if (moreRequestRef.current) return moreRequestRef.current;
+    if (page.nextOffset === null) return Promise.resolve(0);
+    const pending = loadPage(selectedTag, page.nextOffset, false);
+    moreRequestRef.current = pending;
+    void pending.finally(() => {
+      if (moreRequestRef.current === pending) moreRequestRef.current = null;
+    });
+    return pending;
+  }, [loadPage, page.nextOffset, selectedTag]);
+
+  const selectTag = (tag: string | null) => {
+    if (tag === selectedTag) return;
+    setSelectedTag(tag);
+    moreRequestRef.current = null;
+    setPage({ images: [], nextOffset: 0, totalCount: 0 });
+    void loadPage(tag, 0, true);
+  };
+
+  useEffect(() => () => requestRef.current?.abort(), []);
+  useEffect(() => {
+    if (loading || error || page.nextOffset === null || !nextPageRef.current)
+      return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting && page.nextOffset !== null) {
+          observer.disconnect();
+          void loadMore();
+        }
+      },
+      { rootMargin: "400px" },
     );
-  }, [activeTag, images]);
+    observer.observe(nextPageRef.current);
+    return () => observer.disconnect();
+  }, [loading, error, page.nextOffset, loadMore]);
 
   return (
     <div className="mx-auto grid max-w-7xl gap-10">
@@ -83,7 +138,7 @@ export default function GalleryShell({ images, isAdmin }: GalleryShellProps) {
                   key={tag === null ? "filter:all" : `filter:${tag}`}
                   type="button"
                   aria-pressed={isActive}
-                  onClick={() => setSelectedTag(tag)}
+                  onClick={() => selectTag(tag)}
                   className={`rounded-none border px-3 py-2 text-xs font-bold
                   transition duration-150 focus-visible:outline-2
                   focus-visible:outline-[#2f5d7c]/30 ${
@@ -102,19 +157,45 @@ export default function GalleryShell({ images, isAdmin }: GalleryShellProps) {
         </div>
       </header>
 
-      {images.length > 0 ? (
+      {page.images.length > 0 ? (
         <MasonryGallery
-          images={sortedImages}
-          progressivelyRender={activeTag === null}
+          key={selectedTag ?? "all"}
+          images={page.images}
+          progressivelyRender={false}
+          hasMore={page.nextOffset !== null}
+          totalCount={page.totalCount}
+          onLoadMore={loadMore}
         />
-      ) : (
+      ) : !loading && !error ? (
         <div
           className="rounded-none border border-dashed border-[#cbd5d1] bg-white
             px-6 py-12 text-center text-[#68736f]"
         >
-          表示できる画像がありません。先に /api/sync を実行してください。
+          表示できる画像がありません。
         </div>
-      )}
+      ) : null}
+      {loading ? <p role="status">画像を読み込み中…</p> : null}
+      {error ? (
+        <button
+          type="button"
+          onClick={() =>
+            void loadPage(
+              selectedTag,
+              page.nextOffset ?? 0,
+              page.images.length === 0,
+            )
+          }
+        >
+          再試行
+        </button>
+      ) : null}
+      {page.nextOffset !== null ? (
+        <div
+          ref={nextPageRef}
+          className="h-px"
+          aria-label="次の画像を読み込む"
+        />
+      ) : null}
     </div>
   );
 }
