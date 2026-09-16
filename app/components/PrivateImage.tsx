@@ -11,6 +11,7 @@ interface PrivateImageProps {
   className?: string;
   eager?: boolean;
   canRetry?: boolean;
+  aspectRatio?: number;
 }
 
 export default function PrivateImage({
@@ -19,6 +20,7 @@ export default function PrivateImage({
   className,
   eager = false,
   canRetry = false,
+  aspectRatio,
 }: PrivateImageProps) {
   const container = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<{ url: string; error: boolean }>({
@@ -39,9 +41,23 @@ export default function PrivateImage({
 
     const load = () => {
       if (!visible || disposed) return;
+      // Driveの長辺指定に合わせ、coverによる拡大と画面密度を考慮する。
+      const { width: boxWidth, height: boxHeight } =
+        element.getBoundingClientRect();
+      const ratio =
+        aspectRatio && Number.isFinite(aspectRatio) && aspectRatio > 0
+          ? aspectRatio
+          : undefined;
+      const longEdge = ratio
+        ? (variant === "card" ? Math.max : Math.min)(
+            boxWidth / ratio,
+            boxHeight,
+          ) * Math.max(ratio, 1)
+        : Math.max(boxWidth, boxHeight);
       const width = selectImageWidth(
-        element.getBoundingClientRect().width *
-          Math.min(window.devicePixelRatio || 1, 3),
+        variant === "lightbox" || !ratio
+          ? 1600
+          : longEdge * Math.min(window.devicePixelRatio || 1, 3),
         variant,
       );
       if (width <= loadedWidth) return;
@@ -88,7 +104,7 @@ export default function PrivateImage({
       resize.disconnect();
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [src, eager, retry]);
+  }, [src, eager, retry, aspectRatio]);
 
   return (
     <div ref={container} className="absolute inset-0">

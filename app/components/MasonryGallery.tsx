@@ -46,7 +46,7 @@ const cardVariants: Variants = {
 };
 
 function getStableAspectRatio(image: GalleryImage): number {
-  if (image.aspectRatio && image.aspectRatio > 0) return image.aspectRatio;
+  // 写真の実寸とは分け、画像IDごとに安定したカードの高低差を付ける。
   const ratios = [0.68, 0.74, 0.8, 0.9, 1, 1.12, 1.22, 1.32];
   let hash = 2166136261;
 
@@ -142,6 +142,7 @@ function GalleryCard({
           <PrivateImage
             src={image.thumbnailUrl}
             alt={image.name}
+            aspectRatio={image.aspectRatio}
             className="object-cover grayscale-0 transition duration-200 ease-out
               md:grayscale md:group-hover:scale-[1.025]
               md:group-hover:grayscale-0"

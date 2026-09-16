@@ -12,20 +12,22 @@ import {
 export default {
   async fetch(request, env): Promise<Response> {
     const origin = request.headers.get("origin");
-    const allowed = env.ALLOWED_ORIGINS.split(",")
-      .map((value) => value.trim())
-      .includes(origin ?? "");
-    const cors: Record<string, string> =
-      allowed && origin
-        ? {
-            "Access-Control-Allow-Origin": origin,
-            "Access-Control-Expose-Headers":
-              "Content-Disposition, X-Image-Route",
-            Vary: "Origin, Authorization",
-          }
-        : {};
+    const cors: Record<string, string> = { Vary: "Origin, Authorization" };
     try {
-      if (!allowed) throw new ImageError("origin_denied", 403);
+      // ローカル・本番とも、設定不足は秘密値を出さず明示的に拒否する。
+      const origins =
+        typeof env.ALLOWED_ORIGINS === "string"
+          ? env.ALLOWED_ORIGINS.split(",")
+              .map((value) => value.trim())
+              .filter(Boolean)
+          : [];
+      if (origins.length === 0)
+        throw new ImageError("allowed_origins_not_configured", 503);
+      if (!origin || !origins.includes(origin))
+        throw new ImageError("origin_denied", 403);
+      cors["Access-Control-Allow-Origin"] = origin;
+      cors["Access-Control-Expose-Headers"] =
+        "Content-Disposition, X-Image-Route";
       if (request.method === "OPTIONS")
         return new Response(null, {
           status: 204,
@@ -41,11 +43,23 @@ export default {
         throw new ImageError("method_not_allowed", 405);
       const url = new URL(request.url);
       if (url.pathname !== "/image") throw new ImageError("not_found", 404);
+      if (
+        typeof env.IMAGE_TICKET_SECRET !== "string" ||
+        env.IMAGE_TICKET_SECRET.length < 32
+      )
+        throw new ImageError("signing_not_configured", 503);
       // ヘッダーで受け取り、チケットをURLやアクセスログへ記録しない。
       const ticket = await verifyImageTicket(
         request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "",
         env.IMAGE_TICKET_SECRET,
       );
+      if (
+        typeof env.GOOGLE_CLIENT_EMAIL !== "string" ||
+        !env.GOOGLE_CLIENT_EMAIL.trim() ||
+        typeof env.GOOGLE_PRIVATE_KEY !== "string" ||
+        !env.GOOGLE_PRIVATE_KEY.trim()
+      )
+        throw new ImageError("drive_credentials_not_configured", 503);
       const { response, contentType, fileName } = await fetchDriveMedia(
         ticket,
         { email: env.GOOGLE_CLIENT_EMAIL, privateKey: env.GOOGLE_PRIVATE_KEY },
@@ -86,6 +100,7 @@ export default {
           event: "image_delivery",
           route: "worker",
           status: error instanceof ImageError ? error.status : 503,
+          code: error instanceof ImageError ? error.code : "image_unavailable",
         }),
       );
       return imageErrorResponse(error, cors);

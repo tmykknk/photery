@@ -27,7 +27,7 @@ export class ImageError extends Error {
 
 export function selectImageWidth(width: number, variant: ImageVariant): number {
   if (variant === "download") return 0;
-  const maximum = variant === "card" ? 800 : 1600;
+  const maximum = 1600;
   return (
     imageWidths.find((value) => value >= width && value <= maximum) ?? maximum
   );
@@ -145,10 +145,7 @@ function isImageTicket(value: unknown): value is ImageTicket {
     typeof t.width === "number" &&
     (t.variant === "download"
       ? t.width === 0
-      : imageWidths.some(
-          (width) =>
-            width === t.width && (t.variant !== "card" || width <= 800),
-        )) &&
+      : imageWidths.some((width) => width === t.width)) &&
     Number.isSafeInteger(t.iat) &&
     Number.isSafeInteger(t.exp)
   );
