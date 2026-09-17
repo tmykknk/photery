@@ -2,7 +2,7 @@
 
 import { motion, type Variants } from "framer-motion";
 import PrivateImage from "./PrivateImage";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Lightbox from "./Lightbox";
 import type { GalleryImage } from "./gallery-types";
 import { getImageDateLabel } from "./gallery-utils";
@@ -73,7 +73,7 @@ function getColumnCount(viewportWidth: number): number {
 function useResponsiveColumnCount(): number {
   const [columnCount, setColumnCount] = useState(2);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const updateColumnCount = () =>
       setColumnCount(getColumnCount(window.innerWidth));
 
@@ -124,6 +124,7 @@ function GalleryCard({
       custom={shouldAnimateImmediately ? 0 : index}
       variants={cardVariants}
       initial="hidden"
+      animate={shouldAnimateImmediately ? "visible" : undefined}
       whileInView="visible"
       viewport={{ once: true, margin: "0px 0px -8% 0px", amount: 0.12 }}
       whileHover={{ y: -2, transition: { duration: 0.12 } }}

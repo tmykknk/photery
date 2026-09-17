@@ -52,12 +52,12 @@ export function createImageClient(
   now = Date.now,
 ) {
   let active = 0;
-  const queue: Array<() => void> = [];
+  const queue: Array<{ run: () => void; priority: boolean }> = [];
   let failures = 0;
   let fallbackUntil = 0;
   const tickets = new Map<string, TicketResponse>();
 
-  async function acquire(signal: AbortSignal) {
+  async function acquire(signal: AbortSignal, priority: boolean) {
     signal.throwIfAborted();
     if (active < 4) {
       active++;
@@ -69,18 +69,22 @@ export function createImageClient(
         resolve();
       };
       const abort = () => {
-        const index = queue.indexOf(run);
+        const index = queue.findIndex((item) => item.run === run);
         if (index >= 0) queue.splice(index, 1);
         reject(signal.reason);
       };
       signal.addEventListener("abort", abort, { once: true });
-      queue.push(run);
+      const position = priority
+        ? queue.findIndex((item) => !item.priority)
+        : -1;
+      if (position < 0) queue.push({ run, priority });
+      else queue.splice(position, 0, { run, priority });
     });
   }
 
   function release() {
     const next = queue.shift();
-    if (next) next();
+    if (next) next.run();
     else active--;
   }
 
@@ -122,8 +126,9 @@ export function createImageClient(
     endpoint: string,
     signal: AbortSignal,
     download = false,
+    priority = false,
   ): Promise<ImageResult> {
-    await acquire(signal);
+    await acquire(signal, priority);
     try {
       signal.throwIfAborted();
       if (!download && now() < fallbackUntil)

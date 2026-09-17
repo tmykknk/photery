@@ -1,7 +1,6 @@
-"use client";
-
+// GalleryIntroのクライアント境界内で使う。コールバックはサーバーを跨がない。
 import { AnimatePresence, motion } from "framer-motion";
-import { useLayoutEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 const smoothEase = [0.22, 1, 0.36, 1] as const;
 
@@ -98,9 +97,35 @@ function IntroMark() {
   );
 }
 
-export default function IntroOverlay() {
+export default function IntroOverlay({
+  ready,
+  onComplete,
+}: {
+  ready: boolean;
+  onComplete: () => void;
+}) {
   const [showIntro, setShowIntro] = useState(true);
   const [isScrollLocked, setIsScrollLocked] = useState(true);
+  const [minimumElapsed, setMinimumElapsed] = useState(false);
+  const complete = useRef(onComplete);
+  useEffect(() => {
+    complete.current = onComplete;
+  }, [onComplete]);
+  useEffect(() => {
+    const minimum = setTimeout(() => setMinimumElapsed(true), 2000);
+    const fade = setTimeout(() => setShowIntro(false), 4450);
+    const deadline = setTimeout(() => complete.current(), 5000);
+    return () => {
+      clearTimeout(minimum);
+      clearTimeout(fade);
+      clearTimeout(deadline);
+    };
+  }, []);
+  useEffect(() => {
+    if (!minimumElapsed || !ready) return;
+    const timer = setTimeout(() => setShowIntro(false), 0);
+    return () => clearTimeout(timer);
+  }, [minimumElapsed, ready]);
 
   useLayoutEffect(() => {
     if (!isScrollLocked) {
@@ -108,19 +133,27 @@ export default function IntroOverlay() {
     }
 
     const previousBodyPaddingRight = document.body.style.paddingRight;
+    const previousOverflow = document.body.style.overflow;
     const bodyPaddingRight =
       Number.parseFloat(getComputedStyle(document.body).paddingRight) || 0;
     const scrollbarWidth = measureScrollbarWidth();
 
     document.body.style.paddingRight = `${bodyPaddingRight + scrollbarWidth}px`;
+    document.body.style.overflow = "hidden";
 
     return () => {
       document.body.style.paddingRight = previousBodyPaddingRight;
+      document.body.style.overflow = previousOverflow;
     };
   }, [isScrollLocked]);
 
   return (
-    <AnimatePresence onExitComplete={() => setIsScrollLocked(false)}>
+    <AnimatePresence
+      onExitComplete={() => {
+        setIsScrollLocked(false);
+        complete.current();
+      }}
+    >
       {showIntro ? (
         <motion.div
           data-intro-overlay
@@ -134,12 +167,11 @@ export default function IntroOverlay() {
             className="grid place-items-center gap-4"
             initial={{ opacity: 0, scale: 0.9, filter: "blur(12px)" }}
             animate={{
-              opacity: [0, 1, 1, 0],
+              opacity: [0, 1, 1, 1],
               scale: [0.9, 1, 1.02, 1.08],
-              filter: ["blur(12px)", "blur(0px)", "blur(0px)", "blur(8px)"],
+              filter: ["blur(12px)", "blur(0px)", "blur(0px)", "blur(0px)"],
             }}
             transition={{ duration: 2, times: [0, 0.24, 0.82, 1] }}
-            onAnimationComplete={() => setShowIntro(false)}
           >
             <IntroMark />
             <motion.p

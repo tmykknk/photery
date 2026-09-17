@@ -104,7 +104,7 @@ export default function GalleryShell({
   }, [loading, error, page.nextOffset, loadMore]);
 
   return (
-    <div className="mx-auto grid max-w-7xl gap-10">
+    <div data-gallery-ready className="mx-auto grid max-w-7xl gap-10">
       <header
         className="flex flex-col items-start justify-between gap-6 border-b
           border-[#d7dedb] pb-8 text-left lg:flex-row lg:items-end"

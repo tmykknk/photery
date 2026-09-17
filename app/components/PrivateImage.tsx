@@ -28,6 +28,7 @@ export default function PrivateImage({
     error: false,
   });
   const [retry, setRetry] = useState(0);
+  const [decodedUrl, setDecodedUrl] = useState("");
 
   useEffect(() => {
     const element = container.current;
@@ -66,7 +67,13 @@ export default function PrivateImage({
       const current = new AbortController();
       controller = current;
       void imageClient
-        .load(`${src}&width=${width}`, current.signal)
+        .load(
+          `${src}&width=${width}`,
+          current.signal,
+          false,
+          element.getBoundingClientRect().top < window.innerHeight &&
+            element.getBoundingClientRect().bottom > 0,
+        )
         .then(({ blob }) => {
           if (disposed || current.signal.aborted) return;
           if (objectUrl) URL.revokeObjectURL(objectUrl);
@@ -96,9 +103,12 @@ export default function PrivateImage({
     const resize = new ResizeObserver(load);
     intersection.observe(element);
     resize.observe(element);
-    if (eager) load();
+    const frame = requestAnimationFrame(() => {
+      if (eager) load();
+    });
     return () => {
       disposed = true;
+      cancelAnimationFrame(frame);
       controller?.abort();
       intersection.disconnect();
       resize.disconnect();
@@ -107,13 +117,44 @@ export default function PrivateImage({
   }, [src, eager, retry, aspectRatio]);
 
   return (
-    <div ref={container} className="absolute inset-0">
+    <div
+      ref={container}
+      className="absolute inset-0"
+      data-private-image={
+        state.error
+          ? "error"
+          : state.url && decodedUrl === state.url
+            ? "ready"
+            : "loading"
+      }
+    >
       {state.url ? (
         <Image
+          key={state.url}
           src={state.url}
           alt={alt}
           fill
           unoptimized
+          loading="eager"
+          onLoad={async (event) => {
+            const element = event.currentTarget;
+            const url = element.src;
+            try {
+              await element.decode();
+              if (element.isConnected && element.src === url)
+                setDecodedUrl(url);
+            } catch {
+              if (element.isConnected && element.src === url)
+                setState((current) =>
+                  current.url === url ? { ...current, error: true } : current,
+                );
+            }
+          }}
+          onError={() =>
+            setState((current) =>
+              current.url === state.url ? { ...current, error: true } : current,
+            )
+          }
           className={className}
         />
       ) : null}

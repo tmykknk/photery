@@ -478,7 +478,8 @@ photery/
 ### Components
 
 - `app/components/GalleryShell.tsx`: ヘッダー、フォルダタグ、管理者用メタデータSyncを表示します。全体・タグ別に60件ずつ認証付きAPIから取得し、フィルタ切替時は古いリクエストを中止します。
-- `app/components/IntroOverlay.tsx`: 2秒のイントロアニメーションと0.55秒の退出を担当します。ギャラリーデータ取得から独立して先に描画され、Supabase待ち時間とイントロ表示時間を重ねます。
+- `app/components/IntroOverlay.tsx`: 最低2秒表示し、画面内の画像のデコード完了後に0.55秒で退出します。退出を含め最大5秒で解除し、遅い画像は裏で取得を継続します。
+- `app/components/GalleryIntro.tsx`: イントロ中もギャラリーをマウントし、画面内の画像の準備状態を共有します。空一覧・取得失敗も待機終了として扱い、イントロ中は背景操作を抑止します。画像取得は画面内を優先し、同時4件までです。
 - `app/components/MasonryGallery.tsx`: 読み込んだ写真を自然な縦横比で配置します。先頭の少数のみeager、それ以外はlazyで、`PrivateImage` が表示幅とDPRからDriveサムネイルの要求サイズを選びます。
 - `app/components/PrivateImage.tsx`: 可視領域にある画像だけを取得し、表示終了時にはBlob URLを解放します。
 - `app/components/image-client.ts`: チケット取得、同時取得数の制限、Worker障害時の限定フォールバック、期限切れチケットの再発行を担当します。

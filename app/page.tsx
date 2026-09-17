@@ -9,7 +9,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { createHash } from "node:crypto";
 import GalleryShell from "./components/GalleryShell";
-import IntroOverlay from "./components/IntroOverlay";
+import GalleryIntro from "./components/GalleryIntro";
 import { getGalleryPage, getGalleryTags } from "./lib/gallery-data";
 import type { GalleryPage } from "./components/gallery-types";
 
@@ -61,20 +61,21 @@ async function GalleryContent() {
 
 export default function Home() {
   return (
-    <>
-      <IntroOverlay />
+    <GalleryIntro>
       <main
         className="min-h-screen bg-[#f7f8f4] px-4 py-8 text-[#161a18] sm:px-6
           md:px-10"
       >
         <Suspense
           fallback={
-            <div className="min-h-[70vh]" aria-label="ギャラリーを読み込み中" />
+            <div className="min-h-[70vh]" role="status">
+              ギャラリーを読み込み中…
+            </div>
           }
         >
           <GalleryContent />
         </Suspense>
       </main>
-    </>
+    </GalleryIntro>
   );
 }
