@@ -2,8 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
-import { imageClient } from "./image-client";
-import { selectImageWidth } from "../../shared/image-protocol";
+import { displayImageCache } from "./display-image-cache";
 
 interface PrivateImageProps {
   src: string;
@@ -11,7 +10,6 @@ interface PrivateImageProps {
   className?: string;
   eager?: boolean;
   canRetry?: boolean;
-  aspectRatio?: number;
 }
 
 export default function PrivateImage({
@@ -20,7 +18,6 @@ export default function PrivateImage({
   className,
   eager = false,
   canRetry = false,
-  aspectRatio,
 }: PrivateImageProps) {
   const container = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<{ url: string; error: boolean }>({
@@ -29,92 +26,67 @@ export default function PrivateImage({
   });
   const [retry, setRetry] = useState(0);
   const [decodedUrl, setDecodedUrl] = useState("");
+  const leaseRef = useRef<ReturnType<typeof displayImageCache.acquire> | null>(
+    null,
+  );
 
   useEffect(() => {
     const element = container.current;
     if (!element) return;
-    let controller: AbortController | null = null;
-    let objectUrl = "";
-    let visible = eager;
+    let lease: ReturnType<typeof displayImageCache.acquire> | null = null;
     let disposed = false;
-    let loadedWidth = 0;
-    const variant = src.includes("variant=card") ? "card" : "lightbox";
+    let invalidated = false;
 
     const load = () => {
-      if (!visible || disposed) return;
-      // Driveの長辺指定に合わせ、coverによる拡大と画面密度を考慮する。
-      const { width: boxWidth, height: boxHeight } =
-        element.getBoundingClientRect();
-      const ratio =
-        aspectRatio && Number.isFinite(aspectRatio) && aspectRatio > 0
-          ? aspectRatio
-          : undefined;
-      const longEdge = ratio
-        ? (variant === "card" ? Math.max : Math.min)(
-            boxWidth / ratio,
-            boxHeight,
-          ) * Math.max(ratio, 1)
-        : Math.max(boxWidth, boxHeight);
-      const width = selectImageWidth(
-        variant === "lightbox" || !ratio
-          ? 1600
-          : longEdge * Math.min(window.devicePixelRatio || 1, 3),
-        variant,
+      if (lease || disposed) return;
+      invalidated = false;
+      const bounds = element.getBoundingClientRect();
+      const current = displayImageCache.acquire(
+        src,
+        eager || (bounds.top < window.innerHeight && bounds.bottom > 0),
+        () => {
+          if (!disposed && lease === current) {
+            invalidated = true;
+            setState({ url: "", error: true });
+          }
+        },
       );
-      if (width <= loadedWidth) return;
-      loadedWidth = width;
-      controller?.abort();
-      const current = new AbortController();
-      controller = current;
-      void imageClient
-        .load(
-          `${src}&width=${width}`,
-          current.signal,
-          false,
-          element.getBoundingClientRect().top < window.innerHeight &&
-            element.getBoundingClientRect().bottom > 0,
-        )
-        .then(({ blob }) => {
-          if (disposed || current.signal.aborted) return;
-          if (objectUrl) URL.revokeObjectURL(objectUrl);
-          objectUrl = URL.createObjectURL(blob);
-          setState({ url: objectUrl, error: false });
+      lease = current;
+      leaseRef.current = current;
+      void current.promise
+        .then((url) => {
+          if (disposed || invalidated || lease !== current) return;
+          setState({ url, error: false });
         })
         .catch(() => {
-          if (!disposed && !current.signal.aborted)
-            setState({ url: objectUrl, error: true });
+          if (!disposed && lease === current)
+            setState({ url: "", error: true });
         });
     };
     const intersection = new IntersectionObserver(
       ([entry]) => {
-        visible = Boolean(entry?.isIntersecting);
-        if (visible) load();
+        if (entry?.isIntersecting) load();
         else {
-          controller?.abort();
-          controller = null;
-          loadedWidth = 0;
-          if (objectUrl) URL.revokeObjectURL(objectUrl);
-          objectUrl = "";
+          lease?.release();
+          lease = null;
+          leaseRef.current = null;
           setState({ url: "", error: false });
         }
       },
       { rootMargin: "200px" },
     );
-    const resize = new ResizeObserver(load);
     intersection.observe(element);
-    resize.observe(element);
     const frame = requestAnimationFrame(() => {
       if (eager) load();
     });
     return () => {
       disposed = true;
       cancelAnimationFrame(frame);
-      controller?.abort();
+      lease?.release();
+      leaseRef.current = null;
       intersection.disconnect();
-      resize.disconnect();
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [src, eager, retry, aspectRatio]);
+  }, [src, eager, retry]);
 
   return (
     <div
@@ -129,34 +101,43 @@ export default function PrivateImage({
       }
     >
       {state.url ? (
-        <Image
-          key={state.url}
-          src={state.url}
-          alt={alt}
-          fill
-          unoptimized
-          loading="eager"
-          onLoad={async (event) => {
-            const element = event.currentTarget;
-            const url = element.src;
-            try {
-              await element.decode();
-              if (element.isConnected && element.src === url)
-                setDecodedUrl(url);
-            } catch {
-              if (element.isConnected && element.src === url)
-                setState((current) =>
-                  current.url === url ? { ...current, error: true } : current,
-                );
+        <div
+          className={`absolute inset-0 transition-opacity duration-300 ease-out
+            motion-reduce:transition-none ${
+              decodedUrl === state.url ? "opacity-100" : "opacity-0"
+            }`}
+        >
+          <Image
+            key={state.url}
+            src={state.url}
+            alt={alt}
+            fill
+            unoptimized
+            loading="eager"
+            onLoad={async (event) => {
+              const element = event.currentTarget;
+              const url = element.src;
+              try {
+                await element.decode();
+                if (element.isConnected && element.src === url)
+                  setDecodedUrl(url);
+              } catch {
+                if (element.isConnected && element.src === url)
+                  setState((current) =>
+                    current.url === url ? { ...current, error: true } : current,
+                  );
+              }
+            }}
+            onError={() =>
+              setState((current) =>
+                current.url === state.url
+                  ? { ...current, error: true }
+                  : current,
+              )
             }
-          }}
-          onError={() =>
-            setState((current) =>
-              current.url === state.url ? { ...current, error: true } : current,
-            )
-          }
-          className={className}
-        />
+            className={className}
+          />
+        </div>
       ) : null}
       {state.error ? (
         <div
@@ -168,6 +149,7 @@ export default function PrivateImage({
               type="button"
               onClick={(event) => {
                 event.stopPropagation();
+                leaseRef.current?.invalidate();
                 setRetry((value) => value + 1);
               }}
             >

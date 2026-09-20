@@ -143,7 +143,6 @@ function GalleryCard({
           <PrivateImage
             src={image.thumbnailUrl}
             alt={image.name}
-            aspectRatio={image.aspectRatio}
             className="object-cover grayscale-0 transition duration-200 ease-out
               md:grayscale md:group-hover:scale-[1.025]
               md:group-hover:grayscale-0"

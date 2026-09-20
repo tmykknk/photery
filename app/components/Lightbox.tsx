@@ -39,8 +39,12 @@ export default function Lightbox({
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
   const imageViewportRef = useRef<HTMLDivElement>(null);
   const { handleDownload, isDownloading } = useImageDownload(image);
-  const { handleFullscreen, isFullscreen, isFullscreenAvailable } =
-    useFullscreen(imageViewportRef);
+  const {
+    handleFullscreen,
+    isFullscreen,
+    isFullscreenAvailable,
+    shouldIgnoreEscape,
+  } = useFullscreen(imageViewportRef, Boolean(image));
 
   useEffect(() => {
     const animationFrame = window.requestAnimationFrame(() => {
@@ -54,19 +58,20 @@ export default function Lightbox({
     if (!image) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape" && !shouldIgnoreEscape()) onClose();
       if (event.key === "ArrowLeft") onPrevious();
       if (event.key === "ArrowRight") onNext();
     };
 
     document.addEventListener("keydown", handleKeyDown);
+    const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = "";
+      document.body.style.overflow = previousOverflow;
     };
-  }, [image, onClose, onNext, onPrevious]);
+  }, [image, onClose, onNext, onPrevious, shouldIgnoreEscape]);
 
   if (!portalRoot) return null;
 
@@ -137,7 +142,8 @@ export default function Lightbox({
               {isFullscreen ? (
                 <IconButton
                   label="Exit fullscreen"
-                  className="absolute right-4 bottom-4 z-20"
+                  className="absolute top-[max(1rem,env(safe-area-inset-top))]
+                    right-[max(1rem,env(safe-area-inset-right))] z-20"
                   onClick={handleFullscreen}
                 >
                   <FullscreenIcon isFullscreen />

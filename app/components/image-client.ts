@@ -52,10 +52,27 @@ export function createImageClient(
   now = Date.now,
 ) {
   let active = 0;
-  const queue: Array<{ run: () => void; priority: boolean }> = [];
+  const queue: Array<{
+    run: () => void;
+    priority: boolean;
+    signal: AbortSignal;
+  }> = [];
   let failures = 0;
   let fallbackUntil = 0;
   const tickets = new Map<string, TicketResponse>();
+  const authFailureListeners = new Set<() => void>();
+
+  function clearAuthorization() {
+    tickets.clear();
+    for (const listener of authFailureListeners) listener();
+  }
+
+  async function applicationError(response: Response) {
+    const error = await responseError(response);
+    if (response.status === 401 || response.status === 403)
+      clearAuthorization();
+    return error;
+  }
 
   async function acquire(signal: AbortSignal, priority: boolean) {
     signal.throwIfAborted();
@@ -77,8 +94,8 @@ export function createImageClient(
       const position = priority
         ? queue.findIndex((item) => !item.priority)
         : -1;
-      if (position < 0) queue.push({ run, priority });
-      else queue.splice(position, 0, { run, priority });
+      if (position < 0) queue.push({ run, priority, signal });
+      else queue.splice(position, 0, { run, priority, signal });
     });
   }
 
@@ -99,8 +116,9 @@ export function createImageClient(
       cache: "no-store",
       signal,
     });
-    if (!response.ok) throw await responseError(response);
+    if (!response.ok) throw await applicationError(response);
     const value: unknown = await response.json();
+    signal.throwIfAborted();
     if (!isTicket(value)) throw new ImageError("invalid_ticket_response", 502);
     if (tickets.size >= 256) tickets.delete(tickets.keys().next().value ?? "");
     tickets.set(endpoint, value);
@@ -115,7 +133,7 @@ export function createImageClient(
       credentials: "same-origin",
       signal: AbortSignal.any([signal, AbortSignal.timeout(25_000)]),
     });
-    if (!response.ok) throw await responseError(response);
+    if (!response.ok) throw await applicationError(response);
     const blob = await response.blob();
     if (!blob.type.startsWith("image/"))
       throw new ImageError("invalid_image", 415);
@@ -180,7 +198,24 @@ export function createImageClient(
       release();
     }
   }
-  return { load };
+  return {
+    load,
+    clearAuthorization,
+    promote(signal: AbortSignal) {
+      const index = queue.findIndex((item) => item.signal === signal);
+      if (index < 0 || queue[index].priority) return;
+      const [item] = queue.splice(index, 1);
+      item.priority = true;
+      const position = queue.findIndex((queued) => !queued.priority);
+      queue.splice(position < 0 ? queue.length : position, 0, item);
+    },
+    onAuthorizationFailure(listener: () => void) {
+      authFailureListeners.add(listener);
+      return () => {
+        authFailureListeners.delete(listener);
+      };
+    },
+  };
 }
 
 export const imageClient = createImageClient();

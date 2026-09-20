@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import AdminSyncButton from "./AdminSyncButton";
 import type { GalleryPage } from "./gallery-types";
 import MasonryGallery from "./MasonryGallery";
+import { imageClient } from "./image-client";
 
 interface GalleryShellProps {
   initialPage: GalleryPage;
@@ -39,7 +40,11 @@ export default function GalleryShell({
           cache: "no-store",
           signal: controller.signal,
         });
-        if (!response.ok) throw new Error("Gallery request failed");
+        if (!response.ok) {
+          if (response.status === 401 || response.status === 403)
+            imageClient.clearAuthorization();
+          throw new Error("Gallery request failed");
+        }
         const nextPage: GalleryPage = await response.json();
         if (controller.signal.aborted) return 0;
         setPage((current) => ({

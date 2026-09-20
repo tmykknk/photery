@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:lan": "next dev --hostname 0.0.0.0",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -11,6 +12,7 @@
     "worker:check": "tsc --noEmit -p workers/images/tsconfig.json",
     "worker:build": "cd workers/images && wrangler deploy --dry-run --outdir .wrangler/images-build",
     "worker:dev": "wrangler dev --config workers/images/wrangler.jsonc --port 8787",
+    "worker:lan": "wrangler dev --config workers/images/wrangler.jsonc --ip 0.0.0.0 --port 8787",
     "worker:deploy": "wrangler deploy --config workers/images/wrangler.jsonc",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

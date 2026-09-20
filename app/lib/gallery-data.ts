@@ -34,8 +34,8 @@ export async function getGalleryPage(
           .replace(/\.(?:jpe?g|png|gif|webp|avif|heic|heif|bmp|tiff?)$/i, "")
           .trim() || originalName,
       originalFileName: originalName,
-      thumbnailUrl: `${base}?variant=card`,
-      lightboxUrl: `${base}?variant=lightbox`,
+      thumbnailUrl: `${base}?variant=lightbox&width=1600`,
+      lightboxUrl: `${base}?variant=lightbox&width=1600`,
       tags: (row.tags ?? []) as string[],
       folderOrder: row.folder_order ?? Number.MAX_SAFE_INTEGER,
       capturedAt: row.created_at as string | null,

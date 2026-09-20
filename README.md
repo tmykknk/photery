@@ -13,13 +13,13 @@ Next.js × Vercel × Supabase × Cloudflare で構築したフォトギャラリ
 # How
 
 Geminiと壁打ちしながら初期の環境構築やアーキテクチャを固めていきました。  
-その後のコーディングや修正をCodexに任せました。  
+その後のコーディングや修正をCodexに任せました。
 
 # Hsitory
 
 最初はVercelのRoute HandlerがGoogle Driveの画像プロキシを担う設計にしていたため、画像本体の転送量がVercelのFast Origin Transferが無料枠の上限に達し、アプリが表示されない事象が発生しました。  
 そこで毎度おなじみCloudflare Workersを導入。なかなかカオスな仕組みになってしまいました。画像のストレージ変えればええやんって話ですが、Googleドライブに保存するという縛りと、学習がてらゴニョゴニョしてたらこうなりました。
-  
+
 # Architecture
 
 画像ファイルは **Google Driveだけ** に保存します。Supabaseには検索・表示に必要なメタデータだけを保存し、通常時の画像本体はVercelを通りません。
@@ -62,12 +62,12 @@ Workerが通信エラー・5xx・429・上限エラーになった時だけ、�
 
 ### 役割と非公開性
 
-| コンポーネント | 担当 | 画像本体を通常時に送るか | ブラウザへ渡さないもの |
-| --- | --- | --- | --- |
-| Vercel / Next.js | パスワード認可、一覧、チケット発行、限定フォールバック | いいえ | Google認証情報、Supabaseサービスロール、チケット署名鍵 |
-| Cloudflare Worker | チケット検証、Google Driveからのストリーミング | はい | Google認証情報、チケット署名鍵 |
-| Google Drive | 画像原本の保存 | Workerだけへ送る | ファイルへの恒久的な公開URL |
-| Supabase | 画像メタデータ、予備転送の予約・精算 | いいえ | ブラウザからの直接DBアクセス |
+| コンポーネント    | 担当                                                   | 画像本体を通常時に送るか | ブラウザへ渡さないもの                                 |
+| ----------------- | ------------------------------------------------------ | ------------------------ | ------------------------------------------------------ |
+| Vercel / Next.js  | パスワード認可、一覧、チケット発行、限定フォールバック | いいえ                   | Google認証情報、Supabaseサービスロール、チケット署名鍵 |
+| Cloudflare Worker | チケット検証、Google Driveからのストリーミング         | はい                     | Google認証情報、チケット署名鍵                         |
+| Google Drive      | 画像原本の保存                                         | Workerだけへ送る         | ファイルへの恒久的な公開URL                            |
+| Supabase          | 画像メタデータ、予備転送の予約・精算                   | いいえ                   | ブラウザからの直接DBアクセス                           |
 
 チケットはURLに含めず、ブラウザからWorkerへ`Authorization`ヘッダーで渡します。画像レスポンスはブラウザ専用キャッシュであり、共有CDNにはキャッシュしません。
 
@@ -211,7 +211,7 @@ alter table public.drive_images drop column if exists thumbnail_url;
 - Googleのアクセストークン・サービスアカウント秘密鍵をブラウザへ渡しません。チケットは画像ID・用途・サイズ・期限に限定し、Authorizationヘッダーで渡します。
 - 通常時のVercel応答は小さいJSONのみです。画像の `/_next/image` 最適化も通しません。
 - 一覧は60件ずつ取得、可視領域付近のみ画像取得、同時取得は4件までです。ライトボックスの次ページ境界でも追加取得します。
-- 一覧は表示領域・画像の縦横比・画面密度に応じて320 / 640 / 800 / 1600px、拡大表示は1600pxをDriveサムネイルに要求します（長辺の目安）。カードの縦横比は画像IDから決め、高さに変化を付けます。これはGoogle側のベストエフォートであり、厳密な寸法保証ではありません。縮小指定が失敗した場合も既存サムネイルだけを使い、表示用に原本を取得しません。
+- 一覧・拡大表示とも同じ1600pxのDriveサムネイルを要求し、取得済み画像を共有します（長辺の目安）。カードは切り抜き、拡大表示は全体表示です。カードの縦横比は画像IDから決め、高さに変化を付けます。Google側のベストエフォートであり、厳密な寸法保証ではありません。縮小指定が失敗した場合も既存サムネイルだけを使い、表示用に原本を取得しません。
 - 原本は保存操作時だけWorker経由で取得します。Worker障害時は保存を一時停止し、Vercelで原本を中継しません。
 
 ### 導入手順
@@ -239,7 +239,6 @@ pnpm worker:deploy
 5. Vercelに `IMAGE_WORKER_URL=https://photery-images.<account>.workers.dev`、`IMAGE_TICKET_SECRET`、`IMAGE_FALLBACK_BUDGET_BYTES=1000000000` を設定します。転送枠が既に逼迫している場合は、最初は `IMAGE_FALLBACK_BUDGET_BYTES=0` として予備転送を無効にします。
 
 > `wrangler.jsonc`には環境ごとの値を保存しません。Workerが参照する変数名は`workers/images/src/env.d.ts`で型としてだけ宣言し、値はCloudflare側にのみ保存されます。
-
 
 ## 5. 動作確認
 
@@ -296,6 +295,31 @@ Wranglerが設定ファイルと同じディレクトリの `.dev.vars` を読�
 
    `204` が返れば、ローカルの許可Origin設定は機能しています。Worker停止後は `pnpm worker:dev` を再実行して復旧します。
 
+### スマホからのローカル確認
+
+PCとスマホを同じWi-Fiへ接続し、PCのプライベートIPを使います。開発時だけは `10.x.x.x`、`172.16.x.x`〜`172.31.x.x`、`192.168.x.x` のWorker URLを許可します。本番でHTTPのIPアドレスは許可されません。
+
+1. `.env.local` の非秘密設定を、PCのIPに合わせます。
+
+   ```dotenv
+   ALLOWED_ORIGINS=http://localhost:3000,http://192.168.0.111:3000
+   IMAGE_WORKER_URL=http://192.168.0.111:8787
+   ```
+
+2. 起動済みの開発サーバーを停止し、次のコマンドでLAN待受として起動します。
+
+   ```bash
+   pnpm worker:lan
+   ```
+
+   ```bash
+   pnpm dev:lan
+   ```
+
+3. PCは `http://localhost:3000`、スマホは `http://192.168.0.111:3000` を開きます。Next.jsとWorkerは設定変更後に必ず再起動してください。
+
+4. PCで接続でき、スマホだけ接続できない場合は、PCのファイアウォールでTCP 3000と8787を許可し、Wi-Fiルーターの端末間通信遮断（AP isolation）を無効にします。
+
 ### 非公開画像の配信構成
 
 画像の保存先はGoogle Driveのみです。閲覧者は共通パスワードでログインし、Googleアカウントは不要です。
@@ -326,6 +350,18 @@ where created_at >= now() - interval '30 days' or not settled;
 ```
 
 ### 非公開性とキャッシュ
+
+一覧とライトボックスは同じ画像取得処理・Blob URLを共有します。取得済みなら、開閉やスクロールの往復でチケット発行・画像ダウンロードを繰り返しません。前後の画像の先読みや原本のキャッシュは行いません。
+
+- 未使用になった取得済み画像は、最大24枚・Blob合計32MiB・取得完了から5分の範囲でメモリに保持します。上限超過時は最も長く使われていない画像から解放します。表示中の画像は追い出さないため、この値はブラウザ全体のメモリ上限ではありません。
+- 取得中に利用者がゼロになった場合は250ms後に通信を中断します。その間にカードからライトボックスへ利用が移った場合は継続します。「利用者」は人ではなく表示コンポーネントを指します。
+- 表示中に5分を超えても画像は消しません。新しい利用では再取得し、古い画像は表示終了後に解放します。エラーはキャッシュせず、再試行できます。
+- アプリのキャッシュは閲覧中だけです。ページ更新では失われ、IndexedDB・Cache Storageなどへの永続保存は追加しません。画像API・一覧APIの認証失敗を検出した場合は画像とチケットを破棄します。取得済み画像をサーバーから即時回収する仕組みではありません。
+- HTTPキャッシュは以下の既存設定と別です。アプリのメモリキャッシュを消しても、ブラウザ管理のHTTPキャッシュが残る場合があります。
+
+検証時はNetworkで初回の取得完了後にログを消し、同じカードの開閉・スクロールの往復を行います。上限・期限内なら、その画像の `/api/images/` とWorker `/image` の追加通信がないことを確認します。DevToolsの「Disable cache」はHTTPキャッシュ用で、アプリのメモリキャッシュは無効にしません。初回取得をやり直す場合はページを更新してください。画像のデコード・描画時間はキャッシュ利用時も発生し得ます。
+
+スマホではダブルタップで等倍／2.5倍を切り替え、ピンチは1〜4.5倍で指を離しても倍率を保持します。拡大中は画像を移動し、等倍時だけ左右スワイプで画像を切り替えます。全画面ボタンはネイティブFullscreen API対応環境だけに表示し、ブラウザバーを隠す表示を要求します。終了ボタンは全画面内の右上です。ブラウザの終了案内はアプリから消せないため、実機で重なりを確認してください。非対応環境で疑似全画面への置き換えは行いません。
 
 チケットAPI・認証エラーは `private, no-store`。Worker画像はチケット期限までのブラウザ専用キャッシュ、予備画像は最大5分のブラウザ専用キャッシュです。共有CDNにはキャッシュしません。Workerは `Vary: Origin, Authorization` で画像ごとのチケットを区別します。ダウンロードは `no-store` です。
 
@@ -410,6 +446,7 @@ photery/
 │   │   ├── MasonryGallery.tsx
 │   │   ├── PrivateImage.tsx
 │   │   ├── image-client.ts
+│   │   ├── display-image-cache.ts
 │   │   ├── ZoomableImage.tsx
 │   │   ├── gallery-types.ts
 │   │   ├── useFullscreen.ts
@@ -480,8 +517,9 @@ photery/
 - `app/components/GalleryShell.tsx`: ヘッダー、フォルダタグ、管理者用メタデータSyncを表示します。全体・タグ別に60件ずつ認証付きAPIから取得し、フィルタ切替時は古いリクエストを中止します。
 - `app/components/IntroOverlay.tsx`: 最低2秒表示し、画面内の画像のデコード完了後に0.55秒で退出します。退出を含め最大5秒で解除し、遅い画像は裏で取得を継続します。
 - `app/components/GalleryIntro.tsx`: イントロ中もギャラリーをマウントし、画面内の画像の準備状態を共有します。空一覧・取得失敗も待機終了として扱い、イントロ中は背景操作を抑止します。画像取得は画面内を優先し、同時4件までです。
-- `app/components/MasonryGallery.tsx`: 読み込んだ写真を自然な縦横比で配置します。先頭の少数のみeager、それ以外はlazyで、`PrivateImage` が表示幅とDPRからDriveサムネイルの要求サイズを選びます。
-- `app/components/PrivateImage.tsx`: 可視領域にある画像だけを取得し、表示終了時にはBlob URLを解放します。
+- `app/components/MasonryGallery.tsx`: 画像IDに基づく縦横比で、高さに変化を付けて配置します。先頭の少数のみeager、それ以外は可視領域付近で取得し、一覧・ライトボックスで同じ1600px画像を共有します。
+- `app/components/PrivateImage.tsx`: 可視領域の画像を共有キャッシュから取得し、表示終了時には利用を解除します。
+- `app/components/display-image-cache.ts`: 同時取得の重複排除、Blob URLの共有、未使用画像の容量・枚数・期限管理を担当します。
 - `app/components/image-client.ts`: チケット取得、同時取得数の制限、Worker障害時の限定フォールバック、期限切れチケットの再発行を担当します。
 - `app/components/Lightbox.tsx`: 1600pxを要求したDriveサムネイルを使うモーダルです。スワイプ・ズーム・キーボード操作に対応し、原本は保存操作でのみ取得します。
 - `app/components/LightboxControls.tsx`: ライトボックスの操作ボタンとSVGアイコンをまとめた表示専用コンポーネントです。
@@ -518,7 +556,7 @@ photery/
 
 ### Package / Workspace
 
-- `package.json`: 依存関係と `pnpm dev` / `pnpm build` / `pnpm lint` / `pnpm format` / `pnpm format:check` などのスクリプトを管理します。画像配信での変換ライブラリやストレージSDKは含めません。
+- `package.json`: 依存関係と `pnpm dev` / `pnpm dev:lan` / `pnpm worker:dev` / `pnpm worker:lan` / `pnpm build` / `pnpm lint` / `pnpm format` / `pnpm format:check` などのスクリプトを管理します。画像配信での変換ライブラリやストレージSDKは含めません。
 - `pnpm-lock.yaml`: pnpmの依存バージョン固定ファイルです。
 - `pnpm-workspace.yaml`: pnpm workspace設定です。Next.jsの任意依存とWorker開発用のネイティブ依存をビルド許可しています。アプリの画像配信ではsharpを使いません。
 - `next-env.d.ts`: Next.jsが生成・参照する型定義ファイルです。通常は手動編集しません。

@@ -1,8 +1,7 @@
 "use client";
 
-import { motion, type PanInfo } from "framer-motion";
+import { useEffect, useRef, useState, type PointerEvent } from "react";
 import PrivateImage from "./PrivateImage";
-import { useCallback, useEffect, useRef, useState } from "react";
 import type { GalleryImage } from "./gallery-types";
 
 interface ZoomableImageProps {
@@ -11,189 +10,208 @@ interface ZoomableImageProps {
   onNext: () => void;
 }
 
-const smoothEase = [0.22, 1, 0.36, 1] as const;
-const swipeOffsetThreshold = 80;
-const swipeVelocityThreshold = 420;
+interface Point {
+  x: number;
+  y: number;
+}
+interface Transform extends Point {
+  scale: number;
+}
+interface Gesture {
+  start: Point;
+  transform: Transform;
+  time: number;
+  moved: boolean;
+  multiple: boolean;
+  distance: number;
+}
 
 export default function ZoomableImage({
   image,
   onPrevious,
   onNext,
 }: ZoomableImageProps) {
-  const [scale, setScale] = useState(1);
-  const [isInteracting, setIsInteracting] = useState(false);
-  const scaleRef = useRef(1);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [containerSize, setContainerSize] = useState({
-    width: 360,
-    height: 600,
+  const container = useRef<HTMLDivElement>(null);
+  const size = useRef({ width: 0, height: 0 });
+  const pointers = useRef(new Map<number, Point>());
+  const gesture = useRef<Gesture | null>(null);
+  const lastTap = useRef<(Point & { time: number }) | null>(null);
+  const lastPointerType = useRef("");
+  const transformRef = useRef<Transform>({ scale: 1, x: 0, y: 0 });
+  const [transform, setTransform] = useState<Transform>({
+    scale: 1,
+    x: 0,
+    y: 0,
   });
 
-  const isZoomed = scale > 1.05;
-  const panLimitX = (scale - 1) * (containerSize.width / 2);
-  const panLimitY = (scale - 1) * (containerSize.height / 2);
+  // 倍率を保持し、画面サイズに収まる範囲へ移動量だけを補正する。
+  function update(next: Transform) {
+    const scale = Math.max(1, Math.min(4.5, next.scale));
+    const limitX = (size.current.width * (scale - 1)) / 2;
+    const limitY = (size.current.height * (scale - 1)) / 2;
+    const value = {
+      scale,
+      x: Math.max(-limitX, Math.min(limitX, next.x)),
+      y: Math.max(-limitY, Math.min(limitY, next.y)),
+    };
+    transformRef.current = value;
+    setTransform(value);
+  }
 
-  const updateScale = useCallback((nextScale: number) => {
-    scaleRef.current = nextScale;
-    setScale(nextScale);
-  }, []);
-
-  const resetZoom = useCallback(() => {
-    updateScale(1);
-    setIsInteracting(false);
-  }, [updateScale]);
-
-  const toggleZoom = useCallback(() => {
-    if (scale > 1.2) {
-      resetZoom();
-    } else {
-      updateScale(2.5);
-    }
-  }, [scale, resetZoom, updateScale]);
+  function toggleZoom() {
+    update({ scale: transformRef.current.scale > 1 ? 1 : 2.5, x: 0, y: 0 });
+  }
 
   useEffect(() => {
-    const updateSize = () => {
-      if (containerRef.current) {
-        setContainerSize({
-          width: containerRef.current.clientWidth,
-          height: containerRef.current.clientHeight,
-        });
-      }
-    };
-
-    updateSize();
-    window.addEventListener("resize", updateSize);
-    return () => window.removeEventListener("resize", updateSize);
+    const element = container.current;
+    if (!element) return;
+    const observer = new ResizeObserver(() => {
+      size.current = {
+        width: element.clientWidth,
+        height: element.clientHeight,
+      };
+      update(transformRef.current);
+      pointers.current.clear();
+      gesture.current = null;
+      lastTap.current = null;
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
   }, []);
 
-  const touchStateRef = useRef<{
-    initialDist: number;
-    initialScale: number;
-    isPinching: boolean;
-  } | null>(null);
-  const lastTapRef = useRef<{ time: number; x: number; y: number } | null>(
-    null,
-  );
-
-  const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
-    if (event.touches.length === 2) {
-      const firstTouch = event.touches[0];
-      const secondTouch = event.touches[1];
-      if (!firstTouch || !secondTouch) return;
-
-      setIsInteracting(true);
-      touchStateRef.current = {
-        initialDist: Math.hypot(
-          firstTouch.clientX - secondTouch.clientX,
-          firstTouch.clientY - secondTouch.clientY,
-        ),
-        initialScale: scaleRef.current,
-        isPinching: true,
-      };
+  function begin(multiple: boolean) {
+    const [first, second] = [...pointers.current.values()];
+    if (!first) {
+      gesture.current = null;
       return;
     }
+    gesture.current = {
+      start: second
+        ? { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 }
+        : first,
+      transform: { ...transformRef.current },
+      time: performance.now(),
+      moved: false,
+      multiple,
+      distance: second ? Math.hypot(first.x - second.x, first.y - second.y) : 0,
+    };
+  }
 
-    const touch = event.touches[0];
-    if (!touch) return;
+  function pointerDown(event: PointerEvent<HTMLDivElement>) {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    if ((event.target as HTMLElement).closest("button")) return;
+    lastPointerType.current = event.pointerType;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    pointers.current.set(event.pointerId, {
+      x: event.clientX,
+      y: event.clientY,
+    });
+    const multiple =
+      pointers.current.size > 1 || Boolean(gesture.current?.multiple);
+    if (multiple) lastTap.current = null;
+    begin(multiple);
+  }
 
-    const now = Date.now();
+  function pointerMove(event: PointerEvent<HTMLDivElement>) {
+    if (!pointers.current.has(event.pointerId)) return;
+    pointers.current.set(event.pointerId, {
+      x: event.clientX,
+      y: event.clientY,
+    });
+    const current = gesture.current;
+    const [first, second] = [...pointers.current.values()];
+    if (!current || !first) return;
+    if (second) {
+      const distance = Math.hypot(first.x - second.x, first.y - second.y);
+      const scale =
+        current.distance > 0
+          ? (current.transform.scale * distance) / current.distance
+          : current.transform.scale;
+      update({ ...current.transform, scale });
+      return;
+    }
+    const dx = first.x - current.start.x;
+    const dy = first.y - current.start.y;
+    if (Math.hypot(dx, dy) > 10) current.moved = true;
+    if (current.transform.scale > 1) {
+      update({
+        scale: current.transform.scale,
+        x: current.transform.x + dx,
+        y: current.transform.y + dy,
+      });
+    }
+  }
+
+  // タップは指を離した時に確定し、ピンチやスワイプを混同しない。
+  function pointerEnd(event: PointerEvent<HTMLDivElement>, cancelled = false) {
+    if (!pointers.current.has(event.pointerId)) return;
+    const current = gesture.current;
+    pointers.current.delete(event.pointerId);
+    if (cancelled) lastTap.current = null;
     if (
-      lastTapRef.current &&
-      now - lastTapRef.current.time < 300 &&
-      Math.hypot(
-        touch.clientX - lastTapRef.current.x,
-        touch.clientY - lastTapRef.current.y,
-      ) < 35
+      !cancelled &&
+      current &&
+      !current.multiple &&
+      pointers.current.size === 0
     ) {
-      toggleZoom();
-      lastTapRef.current = null;
-      return;
+      const dx = event.clientX - current.start.x;
+      const dy = event.clientY - current.start.y;
+      const time = performance.now();
+      const elapsed = time - current.time;
+      const tap = !current.moved && Math.hypot(dx, dy) <= 10 && elapsed <= 300;
+      if (tap && event.pointerType !== "mouse") {
+        const previous = lastTap.current;
+        if (
+          previous &&
+          time - previous.time <= 300 &&
+          Math.hypot(event.clientX - previous.x, event.clientY - previous.y) <=
+            35
+        ) {
+          lastTap.current = null;
+          toggleZoom();
+        } else lastTap.current = { time, x: event.clientX, y: event.clientY };
+      } else {
+        lastTap.current = null;
+        if (
+          current.transform.scale === 1 &&
+          Math.abs(dx) > Math.abs(dy) &&
+          (Math.abs(dx) > 80 ||
+            (Math.abs(dx) > 10 &&
+              (Math.abs(dx) / Math.max(elapsed, 1)) * 1000 > 420))
+        ) {
+          if (dx > 0) onPrevious();
+          else onNext();
+        }
+      }
     }
-
-    lastTapRef.current = { time: now, x: touch.clientX, y: touch.clientY };
-  };
-
-  const handleTouchMove = (event: React.TouchEvent<HTMLDivElement>) => {
-    const touchState = touchStateRef.current;
-    const firstTouch = event.touches[0];
-    const secondTouch = event.touches[1];
-    if (!touchState?.isPinching || !firstTouch || !secondTouch) return;
-
-    const distance = Math.hypot(
-      firstTouch.clientX - secondTouch.clientX,
-      firstTouch.clientY - secondTouch.clientY,
-    );
-    const nextScale = Math.min(
-      Math.max(
-        (distance / touchState.initialDist) * touchState.initialScale,
-        1,
-      ),
-      4.5,
-    );
-    updateScale(nextScale);
-  };
-
-  const handleTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
-    if (!touchStateRef.current?.isPinching) return;
-
-    setIsInteracting(false);
-    if (scaleRef.current < 1.05) resetZoom();
-    if (event.touches.length === 0) touchStateRef.current = null;
-  };
-
-  const handleDragEnd = (
-    _event: MouseEvent | TouchEvent | PointerEvent,
-    info: PanInfo,
-  ) => {
-    if (isZoomed) return;
-    const hasSwipeDistance = Math.abs(info.offset.x) > swipeOffsetThreshold;
-    const hasSwipeVelocity = Math.abs(info.velocity.x) > swipeVelocityThreshold;
-    if (!hasSwipeDistance && !hasSwipeVelocity) return;
-
-    if (info.offset.x > 0) onPrevious();
-    else onNext();
-  };
+    begin(true);
+  }
 
   return (
-    <motion.div
-      ref={containerRef}
-      className="relative h-full min-h-0 w-full touch-auto overflow-hidden
+    <div
+      ref={container}
+      className="relative h-full min-h-0 w-full touch-none overflow-hidden
         rounded-md bg-zinc-950 select-none"
-      style={{ cursor: "grab", WebkitTouchCallout: "default" }}
-      drag={isZoomed ? false : "x"}
-      dragConstraints={{ left: 0, right: 0 }}
-      dragElastic={0.16}
-      onDragEnd={isZoomed ? undefined : handleDragEnd}
-      initial={{ opacity: 0, scale: 0.96, y: 18 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.98 }}
-      transition={{ duration: 0.28, ease: smoothEase }}
+      style={{
+        cursor: transform.scale > 1 ? "grab" : "zoom-in",
+        WebkitTouchCallout: "none",
+      }}
       onClick={(event) => event.stopPropagation()}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      onDoubleClick={toggleZoom}
+      onDragStart={(event) => event.preventDefault()}
+      onPointerDown={pointerDown}
+      onPointerMove={pointerMove}
+      onPointerUp={(event) => pointerEnd(event)}
+      onPointerCancel={(event) => pointerEnd(event, true)}
+      onLostPointerCapture={(event) => pointerEnd(event, true)}
+      onDoubleClick={() => {
+        if (lastPointerType.current === "mouse") toggleZoom();
+      }}
     >
-      <motion.div
-        className="relative flex h-full w-full items-center justify-center"
-        drag={isZoomed}
-        dragConstraints={{
-          left: -panLimitX,
-          right: panLimitX,
-          top: -panLimitY,
-          bottom: panLimitY,
+      <div
+        className="relative h-full w-full"
+        style={{
+          transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
         }}
-        dragElastic={0.12}
-        animate={{
-          scale,
-          x: isZoomed ? undefined : 0,
-          y: isZoomed ? undefined : 0,
-        }}
-        transition={
-          isInteracting
-            ? { duration: 0 }
-            : { type: "spring", stiffness: 300, damping: 30 }
-        }
       >
         {image.lightboxUrl || image.thumbnailUrl ? (
           <PrivateImage
@@ -208,7 +226,7 @@ export default function ZoomableImage({
             No Image
           </div>
         )}
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   );
 }
