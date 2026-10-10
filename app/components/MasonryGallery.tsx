@@ -2,10 +2,17 @@
 
 import { motion, type Variants } from "framer-motion";
 import PrivateImage from "./PrivateImage";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import Lightbox from "./Lightbox";
 import type { GalleryImage } from "./gallery-types";
 import { getImageDateLabel } from "./gallery-utils";
+import { useLightboxHistory } from "./useLightboxHistory";
 
 interface MasonryGalleryProps {
   images: GalleryImage[];
@@ -275,10 +282,15 @@ export default function MasonryGallery({
   totalCount,
   onLoadMore,
 }: MasonryGalleryProps) {
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const navigationBusy = useRef(false);
   const [navigationStatus, setNavigationStatus] = useState("");
   const navigationVersion = useRef(0);
+  const resetNavigation = useCallback(() => {
+    navigationVersion.current++;
+    setNavigationStatus("");
+  }, []);
+  const { activeIndex, setActiveIndex, openImage, closeImage } =
+    useLightboxHistory(resetNavigation);
   useEffect(
     () => () => {
       navigationVersion.current++;
@@ -332,7 +344,7 @@ export default function MasonryGallery({
           key={progressivelyRender ? "all" : "folder"}
           images={images}
           progressivelyRender={progressivelyRender}
-          onOpen={setActiveIndex}
+          onOpen={openImage}
         />
       ) : (
         <div
@@ -348,11 +360,7 @@ export default function MasonryGallery({
         currentIndex={activeIndex}
         totalCount={totalCount}
         navigationStatus={navigationStatus}
-        onClose={() => {
-          navigationVersion.current++;
-          setActiveIndex(null);
-          setNavigationStatus("");
-        }}
+        onClose={closeImage}
         onPrevious={showPreviousImage}
         onNext={showNextImage}
       />
