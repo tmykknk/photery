@@ -1,82 +1,48 @@
 ---
 name: photery-overview
-description: Overview, architecture, visual direction, and coding rules for Photery app development.
+description: Photery の UI、ギャラリー、認証、Drive 同期、Worker 画像配信を実装・修正するときの構成とデザイン指針。
 ---
 
-# Instructions
-Photery is a private photo gallery app. It connects to the Google Drive API, synchronizes image metadata into Supabase, and displays the collection in a refined Next.js masonry gallery protected by a password-based routing guard.
+# Photery の実装指針
 
-## System Role & Tech Stack
-You are an expert full-stack developer specializing in modern web applications. Strictly adhere to this stack:
-- **Framework:** Next.js App Router / latest project version
-- **Language:** TypeScript in strict mode
-- **Database:** Supabase PostgreSQL via Supabase JS Client
-- **API Integration:** Google Drive API using `googleapis` v3 and JWT service-account auth
-- **Styling:** Tailwind CSS
-- **Animation:** Framer Motion when fluid gallery, intro, layout, or gesture animation is needed
+Photery は Google Drive の写真を家族や友人に共有する非公開ギャラリー。Next.js / Vercel が認可・メタデータ・チケット発行、Cloudflare Worker が通常の画像配信、Supabase がメタデータと予備転送量の管理を担う。
 
-## Visual Direction
-Photery should feel Scandinavian: calm, functional, tactile, and quietly premium.
-- Use a visibly distinct font pairing: a refined display serif for the product name and gallery image titles, and a clean sans-serif for metadata and controls. Keep normal letter spacing for readable text.
-- Prefer crisp off-white surfaces, pale blue-gray structure, blackened text, restrained Nordic blue accents, and sparing muted red details.
-- Keep corners sharp or very modest, with structured borders and light shadows. Avoid decorative card nesting, heavy gradients, glossy effects, beige-heavy palettes, and visually loud color systems.
-- The gallery is the primary experience. Do not add marketing-style hero sections, explanatory feature text, or filter UI unless explicitly requested.
-- Intro animation should use a minimal modern mark, such as a geometric shutter or refined `P` symbol, and fade away quickly into the gallery.
+共通の編集規約、秘密情報・認証・画像配信の制約、検証コマンドは [AGENTS.md](../../../AGENTS.md) に集約する。セットアップ、SQL、運用と確認手順は [README.md](../../../README.md) の関連節を読む。
 
-## Workflow & Architecture Implementation
+## デザイン
 
-### Routing Guard (`proxy.ts`)
-- Implement a route interceptor at the project root level to handle redirection logic within the Next.js routing/middleware sequence.
-- Unauthenticated requests accessing protected routes must be redirected to `/login`.
-- Exclude `/login`, `/api/*`, `/_next/*`, and static assets from redirection loops.
+- 北欧らしい落ち着き、機能性、控えめな上質さを保つ。オフホワイト、淡い青灰色、黒に近い文字、控えめな青と少量のくすんだ赤を基調にする。
+- 既存の `app/layout.tsx` と `app/globals.css` のフォント設定を使う。商品名・写真タイトルはディスプレイセリフ、操作とメタデータは読みやすい書体とし、通常の字間を保つ。
+- 角はシャープまたは小さな丸み、枠と影は控えめにする。カードの装飾的な入れ子、強いグラデーション、光沢、ベージュに偏る配色を追加しない。
+- 写真を主役にし、依頼のない宣伝用ヒーロー・機能説明・追加フィルターを作らない。既存のフォルダタグは維持する。
+- ホバーは約 150〜200ms の短い反応にし、軽い浮き上がり・拡大・影を使う。枠線の色は変えない。登場時のフェードは穏やかにし、動きを減らす設定に配慮する。
 
-### Authentication API (`app/api/auth/route.ts`)
-- Validate user-submitted passwords against the environment variable documented in `.env.local.sample`.
-- Upon successful validation, issue the `site_auth` authentication cookie.
+## ギャラリーと画像取得
 
-### Login Page (`app/login/page.tsx`)
-- Create a clean, responsive password input form using Tailwind CSS.
-- Manage password visibility properly and handle incorrect password submissions gracefully.
-- Send the entered password to the authentication API, and if successful, store the verified session token (not the raw password) in a secure, HTTP-only cookie.
+- `app/page.tsx` / `app/lib/gallery-data.ts` で認証後に最初のメタデータとタグを取得する。全画像や Worker チケットを HTML に埋め込まない。
+- `GalleryShell.tsx` は `/api/gallery` から 60 件単位で取得する。フォルダ順・ファイル名順を保ち、タグ切替時は古い通信を中止し、遅れて返る結果で新しい状態を上書きしない。
+- `MasonryGallery.tsx` の高さに変化がある列配置を維持する。カードの縦横比は画像 ID に基づく安定した値で、カードは切り抜き、ライトボックスは全体表示。表示名から一般的な画像拡張子を除く。
+- 一覧とライトボックスは同じ 1600px を要求する表示画像を共有する。これは Drive サムネイルの長辺の目安であり、実寸保証ではない。
+- `PrivateImage.tsx` / `image-client.ts` / `display-image-cache.ts` の取得経路を再利用する。少数の先頭画像と可視領域を優先し、それ以外は可視領域付近で取得する。同時取得は 4 件まで。全カードを eager 取得する方式へ戻さない。
+- 取得済み Blob URL は Next.js `<Image unoptimized />` で描画する。`fill` と適切な `object-cover` / `object-contain` を使い、Next.js の画像最適化経路へ戻さない。Blob 描画時の `loading="eager"` と、ネットワーク取得の開始条件は区別する。
+- 一覧とライトボックスで進行中の取得・Blob URL を共有し、利用終了時は解放する。未使用キャッシュは最大 24 枚・32MiB・取得完了から 5 分。表示中の画像は追い出さず、認証失敗時は画像とチケットを破棄する。永続キャッシュ、原本キャッシュ、前後画像の先読みは追加しない。
+- 空一覧と取得失敗を区別して表示する。取得失敗・予算切れでもログイン、一覧、タグ操作を維持する。
 
-### Data Synchronization API (`app/api/sync/route.ts`)
-- Initialize the Google Drive API client using service-account credentials.
-- Query configured folders for image MIME types and exclude trashed assets.
-- Store file IDs, names, and safe thumbnail metadata in Supabase.
-- Do not blindly rewrite Google thumbnail URLs with suffixes like `=s1000`; this can break authorization and cause upstream 403 failures.
-- For private or permission-bound Drive assets, render images through the authorized server-side image proxy instead of exposing credentials or relying on public Google URLs.
+## イントロとライトボックス
 
-### Authorized Image Proxy (`app/api/images/[fileId]/route.ts`)
-- Stream Drive images server-side with JWT auth using `drive.files.get({ fileId, alt: "media" })`.
-- Validate `fileId` input before calling Google APIs.
-- Never expose Google private keys, bearer tokens, service-role keys, or signed authorization details to client components.
-- Return useful cache and content-type headers while preserving private access boundaries.
+- `GalleryIntro.tsx` / `IntroOverlay.tsx` はギャラリーをマウントしたまま画面内画像の準備を待つ。最低 2 秒表示し、デコード完了後に 0.55 秒で退出、退出を含め最大 5 秒で解除する。空一覧・エラーで待ち続けない。
+- イントロは幾何学的なシャッターや簡潔な P マークなど、既存の最小限の表現を尊重する。表示中の背景操作は抑止する。
+- 写真を押すと全画面の `backdrop-blur-md` ライトボックスを開く。アイコン操作にはアクセシブルなラベルを付け、矢印キー、Escape、スマホのスワイプに対応する。
+- ライトボックスのページ境界でも追加取得できるようにし、取得中の閉じる操作やタグ切替で古い画像へ移動しない。`useLightboxHistory.ts` の履歴連携を維持する。
+- ダブルタップ／ダブルクリック、ピンチ、拡大中のパンを維持し、左右スワイプによる画像切替は等倍時だけ行う。
+- 全画面ボタンはネイティブ Fullscreen API 対応時だけ表示する。非対応環境に疑似全画面を追加しない。
+- 原本保存は `useImageDownload.ts` を使う。対応スマホは Web Share API、未対応環境はダウンロードへ切り替える。
 
-### Image Gallery Page (`app/page.tsx` and components)
-- Fetch synchronized metadata from Supabase on the server, normalize it, and pass only safe display data to client components.
-- Strip common image file extensions from visible gallery and modal titles.
-- Display images in an asymmetric masonry layout (`columns-*` or equivalent), not a rigid square grid.
-- Preserve natural image proportions when possible and use graceful fallback aspect ratios before images load.
-- Add staggered fade-in animation as images scroll into view. Entrance fades may be calm and slower, but hover feedback must feel immediate.
-- Provide subtle hover micro-interactions, such as gentle lift, mild scale, shadow emphasis, and grayscale-to-color on hover where appropriate. Do not change border color on hover; use drop shadow instead. Keep hover transitions short, around 150-200ms.
-- Clicking an image must open a full-screen `backdrop-blur-md` lightbox.
-- Lightbox controls should be icon-based with accessible labels, support desktop buttons, keyboard arrows, Escape close, and mobile flick/swipe gestures.
-- Use Next.js `<Image />` with responsive `fill`, `sizes`, and `object-cover`/`object-contain` as appropriate.
-- Because CSS multi-column masonry can visually place later DOM items above the fold, gallery card images should use `loading="eager"` unless a different masonry implementation gives deterministic above-the-fold ordering. Use `fetchPriority="high"` only for a small leading subset to avoid over-prioritizing every image.
-- Provide graceful semantic UI states for empty collections and fetch failures.
+## 認証と同期
 
-## Coding Rules & Compliance
-
-### Strict Prohibitions
-- **No Arbitrary Renaming:** Do not change existing file names, function names, route names, or predefined environment variable names unless the user explicitly requests it.
-- **No `.env.local` Access or Leaks:** Never read `.env.local` directly and never leak secrets into code or responses. Infer environment structure only from `.env.local.sample`.
-- **No Authentication Bypassing:** Do not disable, comment out, weaken, or add backdoors to `proxy.ts`, auth handlers, or protected routes for testing convenience.
-- **No Client-Side Secret Leaks:** Never expose Google credentials, Supabase service roles, JWTs, bearer tokens, or private authorization data inside `"use client"` components.
-- **No `any`:** The `any` type is prohibited. Use interfaces, type guards, `unknown`, or explicit safe assertions.
-
-### Required Practices
-- **Strict Type Checking:** Keep TypeScript strict and ensure all new routes, components, and external payload handling are typed.
-- **Logical Consistency & Self-Verification:** Verify state management, routing guards, async flows, null handling, and error paths before responding.
-- **Self-Documenting Code:** Write clean, idiomatic code. Add concise comments only where intent is not obvious, especially around authentication, proxy streaming, or synchronization.
-- **Secure Cookie Configuration:** Auth cookies (`site_auth`) must use `httpOnly: true`, `sameSite: "strict"`, and `secure: process.env.NODE_ENV === "production"`.
-- **Verification:** Run `pnpm lint`, `pnpm exec tsc --noEmit`, and when route/server behavior changes, `pnpm build`.
+- ログイン画面は既存のフォーム送信方式に合わせ、パスワード表示切替、送信中、誤入力の状態を扱う。Cookie の発行は `app/api/auth/route.ts` が担当する。
+- `proxy.ts` は未認証の画面アクセスを `/login` に戻す。ログイン・API・Next.js 内部パス・静的ファイルでリダイレクトループを作らない。
+- 同期は管理者専用の POST。`app/lib/drive-images/google-drive.ts` の `googleapis` v3 / サービスアカウント JWT 認証を使う。
+- `GOOGLE_DRIVE_FOLDER_ID` は単一またはカンマ区切りの複数 ID。指定順を `folder_order`、フォルダ名をタグとして扱い、画像 MIME type のみを取得し、ゴミ箱内を除外する。
+- Supabase へ ID・名前・タグ・フォルダ順・寸法を upsert し、現在の同期対象から外れたメタデータを削除する。列挙や upsert の失敗時に削除へ進まない。旧 `thumbnail_url` 列は現行アプリで使わないため、その列の削除を実装の前提にしない。
+- 画像配信を変更するときは `shared/image-protocol.ts`、`shared/drive-media.ts`、`app/lib/drive-images/image-response.ts`、`workers/images/src/index.ts` の責務と両側の互換性を確認する。
