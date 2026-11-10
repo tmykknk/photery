@@ -18,29 +18,29 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
-    "@fontsource-variable/google-sans-flex": "^5.2.3",
-    "@supabase/supabase-js": "^2.108.2",
-    "framer-motion": "^12.41.0",
-    "googleapis": "^173.0.0",
-    "next": "16.2.9",
-    "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "@fontsource-variable/google-sans-flex": "^5.3.2",
+    "@supabase/supabase-js": "^2.119.0",
+    "framer-motion": "^14.12.0",
+    "googleapis": "^189.0.0",
+    "next": "16.4.6",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260914.1",
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.2.9",
-    "prettier": "^3.8.4",
-    "prettier-plugin-classnames": "^0.10.3",
-    "prettier-plugin-merge": "^0.10.1",
-    "prettier-plugin-tailwindcss": "^0.8.0",
-    "tailwindcss": "^4",
-    "typescript": "^5",
-    "wrangler": "4.130.0"
+    "@cloudflare/workers-types": "^5.20261110.1",
+    "@tailwindcss/postcss": "^4.3.5",
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "eslint": "^10.14.0",
+    "eslint-config-next": "16.4.6",
+    "prettier": "^3.9.10",
+    "prettier-plugin-classnames": "^0.10.5",
+    "prettier-plugin-merge": "^0.10.2",
+    "prettier-plugin-tailwindcss": "^0.8.1",
+    "tailwindcss": "^4.3.5",
+    "typescript": "^6.0.3",
+    "wrangler": "4.160.0"
   },
-  "packageManager": "pnpm@11.9.0"
+  "packageManager": "pnpm@12.18.0"
 }
