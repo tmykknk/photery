@@ -7,7 +7,7 @@
     "dev:lan": "next dev --hostname 0.0.0.0",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "oxlint",
     "worker:types": "wrangler types --config workers/images/wrangler.jsonc workers/images/worker-configuration.d.ts --env-interface Env --include-runtime false",
     "worker:check": "tsc --noEmit -p workers/images/tsconfig.json",
     "worker:build": "cd workers/images && wrangler deploy --dry-run --outdir .wrangler/images-build",
@@ -15,13 +15,13 @@
     "worker:lan": "wrangler dev --config workers/images/wrangler.jsonc --ip 0.0.0.0 --port 8787",
     "worker:deploy": "wrangler deploy --config workers/images/wrangler.jsonc",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "test": "node --test --test-isolation=none tests/*.test.mjs"
   },
   "dependencies": {
     "@fontsource-variable/google-sans-flex": "^5.3.2",
     "@supabase/supabase-js": "^2.119.0",
     "framer-motion": "^14.12.0",
-    "googleapis": "^189.0.0",
     "next": "16.4.6",
     "react": "19.3.1",
     "react-dom": "19.3.1"
@@ -32,8 +32,7 @@
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "eslint": "^10.14.0",
-    "eslint-config-next": "16.4.6",
+    "oxlint": "^1.93.0",
     "prettier": "^3.9.10",
     "prettier-plugin-classnames": "^0.10.5",
     "prettier-plugin-merge": "^0.10.2",

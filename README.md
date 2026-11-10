@@ -413,9 +413,16 @@ Cronの動作確認は **Settings > Cron Jobs** で `/api/cron/keep-alive` の `
 
 - `pnpm format`: Prettierでコード全体を整形します。
 - `pnpm format:check`: Prettierの整形差分がないか確認します。
-- `pnpm lint`: ESLintで静的検査を実行します。
+- `pnpm lint`: Oxlintで静的検査を実行します。
+- `pnpm test`: 外部通信・DB をモックした同期処理の回帰テストを実行します。
 - `pnpm exec tsc --noEmit`: TypeScriptの型チェックを実行します。
 - `pnpm build`: Next.jsの本番ビルドでルートやサーバー処理を含めて検証します。
+
+Oxlint と TypeScript 6 を使用します。React・Next.js・TypeScript・アクセシビリティ・import の内蔵ルールを `.oxlintrc.json` で設定し、correctness をエラーとして扱います。Hooks・依存配列・明示的な `any`・Next.js `Image` の alt 属性も検査します。旧 ESLint ルールの完全再現や JavaScript プラグインによる補完は行いません。型チェックは引き続き `tsc` で実行します。
+
+`role` を適切に使った既存の UI を維持するため、タグへの一律置換を求める `prefer-tag-over-role` は使いません。ライトボックスとズーム領域のクリック伝播抑止は独立した操作ではないため、この2ファイルに限ってクリック用のキーボードイベント・role 検査を除外します。ライトボックスの既存キーボード操作とボタンの検査は維持します。
+
+Drive 同期は標準 `fetch` と `shared/drive-media.ts` のサービスアカウント認証を使います。Google SDK は使用しません。全ページの取得・応答検証が完了してから DB を更新し、HTTP エラー、不正な一覧、不完全な検索、ページトークンの循環では同期を中止します。Drive API の各リクエストは20秒、認証は10秒でタイムアウトし、自動リトライは行いません。`pnpm test` は外部通信と DB をモックし、ページング・タグ・寸法・認可・失敗時の誤削除防止を検証します。Node.js は `mise.toml` の26系を使います。
 
 Prettierは `prettier-plugin-tailwindcss`、`prettier-plugin-classnames`、`prettier-plugin-merge` を使い、Tailwind CSSのクラス順序や長い `className` の整形を自動化しています。
 
@@ -481,7 +488,7 @@ photery/
 ├── .gitignore
 ├── .prettierignore
 ├── README.md
-├── eslint.config.mjs
+├── .oxlintrc.json
 ├── next-env.d.ts
 ├── next.config.ts
 ├── package.json
@@ -537,7 +544,7 @@ photery/
 ### Lib
 
 - `app/lib/auth-token.ts`: `VIEW_PASSWORD` / `ADMIN_PASSWORD` と `SITE_AUTH_SECRET` からHMAC-SHA256の派生トークンを生成・検証する共通ヘルパーです。Cookieには生パスワードではなく、この派生トークンを保存します。`SITE_AUTH_SECRET` が未設定の場合もログイン不能にならないよう各パスワードをフォールバックに使いますが、本番環境では `SITE_AUTH_SECRET` の設定を推奨します。
-- `app/lib/drive-images/google-drive.ts`: Google DriveのJWT認証、Driveクライアント生成、フォルダID解析、画像一覧取得を担当します。
+- `app/lib/drive-images/google-drive.ts`: 共有のJWT認証と標準fetchを利用し、フォルダID解析・フォルダ名取得・画像一覧のページングと応答検証を担当します。
 - `app/lib/drive-images/store.ts`: Supabaseの `drive_images` 読み書き、フォルダ順を含むupsert、現在の同期対象から外れた画像の削除を担当します。
 - `app/lib/drive-images/image-response.ts`: 登録画像の認可、短命チケット発行、予備転送の予約・精算を担当します。
 - `shared/`: VercelとWorkerで共有するチケット検証と安全なDriveメディア取得処理です。
@@ -548,7 +555,7 @@ photery/
 - `proxy.ts`: 未認証ユーザーを `/login` にリダイレクトするルーティングガードです。`/api/*` や静的ファイルは除外します。
 - `next.config.ts`: Next.js設定です。ローカル開発時のHMR origin許可などを管理します。
 - `tsconfig.json`: TypeScript設定です。strict modeやパスエイリアスを管理します。
-- `eslint.config.mjs`: ESLint設定です。`pnpm lint` で利用されます。
+- `.oxlintrc.json`: Oxlint設定です。`pnpm lint` で利用されます。
 - `postcss.config.mjs`: Tailwind CSS v4向けのPostCSS設定です。
 - `prettier.config.mjs`: Prettier本体とTailwind/className整形プラグインの設定です。
 - `.prettierignore`: Prettierの対象外にする生成物やローカル設定ファイルを指定します。

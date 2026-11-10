@@ -42,7 +42,7 @@ Photery は Google Drive の写真を家族や友人に共有する非公開ギ�
 
 - ログイン画面は既存のフォーム送信方式に合わせ、パスワード表示切替、送信中、誤入力の状態を扱う。Cookie の発行は `app/api/auth/route.ts` が担当する。
 - `proxy.ts` は未認証の画面アクセスを `/login` に戻す。ログイン・API・Next.js 内部パス・静的ファイルでリダイレクトループを作らない。
-- 同期は管理者専用の POST。`app/lib/drive-images/google-drive.ts` の `googleapis` v3 / サービスアカウント JWT 認証を使う。
+- 同期は管理者専用の POST。`app/lib/drive-images/google-drive.ts` から Drive REST API v3 を標準 `fetch` で呼び、サービスアカウント JWT 認証は `shared/drive-media.ts` の `getDriveAccessToken` を再利用する。
 - `GOOGLE_DRIVE_FOLDER_ID` は単一またはカンマ区切りの複数 ID。指定順を `folder_order`、フォルダ名をタグとして扱い、画像 MIME type のみを取得し、ゴミ箱内を除外する。
 - Supabase へ ID・名前・タグ・フォルダ順・寸法を upsert し、現在の同期対象から外れたメタデータを削除する。列挙や upsert の失敗時に削除へ進まない。旧 `thumbnail_url` 列は現行アプリで使わないため、その列の削除を実装の前提にしない。
 - 画像配信を変更するときは `shared/image-protocol.ts`、`shared/drive-media.ts`、`app/lib/drive-images/image-response.ts`、`workers/images/src/index.ts` の責務と両側の互換性を確認する。

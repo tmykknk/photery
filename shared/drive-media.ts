@@ -211,6 +211,7 @@ export async function fetchDriveMedia(
 }
 
 export function contentDisposition(fileName: string): string {
+  // oxlint-disable-next-line no-control-regex -- ヘッダーに含めない制御文字を明示的に除去する。
   const safe = fileName.replace(/[\r\n\\"\x00-\x1f]/g, "_");
   return `attachment; filename="${safe.replace(/[^\x20-\x7e]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(safe)}`;
 }
