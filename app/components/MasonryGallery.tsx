@@ -45,8 +45,8 @@ const cardVariants: Variants = {
   visible: (animationOrder: number) => ({
     opacity: 1,
     transition: {
-      delay: Math.min(animationOrder, 16) * 0.06,
-      duration: 0.72,
+      delay: Math.min(animationOrder, 3) * 0.04,
+      duration: 0.3,
       ease: smoothEase,
     },
   }),

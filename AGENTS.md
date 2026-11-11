@@ -56,3 +56,13 @@
 - 画像配信変更時は README の「検証・本番切替の確認」に沿い、未認証・不正/期限切れチケット、通常時の Worker 直接取得、予算 0、原本の予備中継拒否を確認する。
 - ギャラリー変更時はページ境界（60 件目から 61 件目）、タグ切替、ライトボックス、モバイル操作、空一覧・取得失敗を確認する。キャッシュ変更時はカードの開閉・スクロール往復で重複取得と Blob URL の解放も確認する。
 - `pnpm worker:build` は dry-run。`pnpm worker:deploy`、本番 DB の SQL 実行、実データを変更する同期は検証コマンドとして実行しない。
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+## This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

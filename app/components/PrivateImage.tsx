@@ -26,6 +26,8 @@ export default function PrivateImage({
   });
   const [retry, setRetry] = useState(0);
   const [decodedUrl, setDecodedUrl] = useState("");
+  const lastDecodedSrc = useRef("");
+  const [fadeIn, setFadeIn] = useState(true);
   const leaseRef = useRef<ReturnType<typeof displayImageCache.acquire> | null>(
     null,
   );
@@ -36,9 +38,10 @@ export default function PrivateImage({
     let lease: ReturnType<typeof displayImageCache.acquire> | null = null;
     let disposed = false;
     let invalidated = false;
+    let loaded = false;
 
     const load = () => {
-      if (lease || disposed) return;
+      if (disposed || lease) return;
       invalidated = false;
       const bounds = element.getBoundingClientRect();
       const current = displayImageCache.acquire(
@@ -56,21 +59,26 @@ export default function PrivateImage({
       void current.promise
         .then((url) => {
           if (disposed || invalidated || lease !== current) return;
+          // 表示済み画像は一覧を離れるまで保持し、スクロールで取得し直さない。
+          loaded = true;
+          intersection.disconnect();
+          // 同じ画像へ戻ったときは、再取得後もフェードを繰り返さない。
+          setFadeIn(lastDecodedSrc.current !== src);
           setState({ url, error: false });
         })
         .catch(() => {
-          if (!disposed && lease === current)
+          if (!disposed && !invalidated && lease === current)
             setState({ url: "", error: true });
         });
     };
     const intersection = new IntersectionObserver(
       ([entry]) => {
         if (entry?.isIntersecting) load();
-        else {
+        else if (!loaded) {
+          // 読み込み中の画像だけは、画面外へ離れたら利用を解除する。
           lease?.release();
           lease = null;
           leaseRef.current = null;
-          setState({ url: "", error: false });
         }
       },
       { rootMargin: "200px" },
@@ -102,10 +110,12 @@ export default function PrivateImage({
     >
       {state.url ? (
         <div
-          className={`absolute inset-0 transition-opacity duration-300 ease-out
-            motion-reduce:transition-none ${
-              decodedUrl === state.url ? "opacity-100" : "opacity-0"
-            }`}
+          className={`absolute inset-0 ${
+            fadeIn
+              ? `transition-opacity duration-300 ease-out
+                motion-reduce:transition-none`
+              : ""
+            } ${decodedUrl === state.url ? "opacity-100" : "opacity-0"}`}
         >
           <Image
             key={state.url}
@@ -119,8 +129,10 @@ export default function PrivateImage({
               const url = element.src;
               try {
                 await element.decode();
-                if (element.isConnected && element.src === url)
+                if (element.isConnected && element.src === url) {
+                  lastDecodedSrc.current = src;
                   setDecodedUrl(url);
+                }
               } catch {
                 if (element.isConnected && element.src === url)
                   setState((current) =>

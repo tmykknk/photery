@@ -156,6 +156,8 @@ export function createImageClient(
         const ticket = await ticketFor(endpoint, signal);
         try {
           const response = await request(ticket.url, {
+            // 同一URLへのHTTPキャッシュ待ちを避け、Blobキャッシュで再利用する。
+            cache: "no-store",
             headers: { Authorization: `Bearer ${ticket.token}` },
             credentials: "omit",
             referrerPolicy: "no-referrer",
